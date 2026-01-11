@@ -1,0 +1,29 @@
+{
+  "name": "jirafly-web",
+  "version": "1.0.0",
+  "description": "Jira task distribution analysis web app",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "node tests/run-tests.js",
+    "test:unit": "node tests/run-tests.js unit",
+    "test:integration": "node tests/run-tests.js integration",
+    "test:api": "node tests/run-tests.js api",
+    "test:auth": "node tests/run-tests.js auth"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["jira", "task-distribution", "analytics"],
+  "author": "",
+  "license": "ISC"
+}

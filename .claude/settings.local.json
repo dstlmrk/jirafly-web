@@ -1,7 +1,0 @@
-{
-  "disabledMcpjsonServers": [
-    "sentry",
-    "GitLab",
-    "mcp-atlassian"
-  ]
-}

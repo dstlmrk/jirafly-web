@@ -85,7 +85,6 @@ http://localhost:3000/?team=falcon&sprints=4
 **Parametry**:
 - `team` - filtr týmu (serenity, falcon, discovery, kosmik)
 - `sprints` - počet sprintů (default: 6)
-- `filter_id` - vlastní Jira filter ID (pokročilé)
 
 ## Kategorie tasků
 
@@ -142,9 +141,7 @@ Vrátí HTML stránku s UI
 Stáhne a zpracuje tasky všech týmů
 
 **Parametry**:
-- `group_by` (string, default: "sprint") - "sprint" nebo "fix_version"
-- `sprints` (number, optional) - počet sprintů
-- `filter_id` (number, optional) - vlastní Jira filter ID
+- `sprints` (number, optional) - počet sprintů (default: 6)
 
 ### `GET /health`
 Health check endpoint
@@ -167,7 +164,7 @@ jirafly-web/
 │   ├── html-template.js    # Frontend s Chart.js + tabulka
 │   └── config.js           # Konfigurace (field IDs, barvy, týmy)
 ├── tests/                  # Testy
-├── Dockerfile.dev          # Docker image
+├── Dockerfile              # Docker image
 ├── docker-compose.yml      # Docker Compose
 ├── .env                    # CREDENTIALS - GITIGNORED!
 ├── CLAUDE.md               # Technická dokumentace

@@ -799,8 +799,6 @@ function generateHTML(options) {
       const params = new URLSearchParams(window.location.search);
       const teamParam = params.get('team');
       return {
-        filterId: params.get('filter_id'),
-        groupBy: params.get('group_by') || 'sprint',
         team: toFullTeamName(teamParam),
         sprintCount: params.get('sprints') ? parseInt(params.get('sprints')) : null
       };
@@ -848,19 +846,13 @@ function generateHTML(options) {
     }
 
     async function loadData() {
-      const { filterId, groupBy, team, sprintCount } = getURLParams();
+      const { team, sprintCount } = getURLParams();
       const statusEl = document.getElementById('status');
 
       // Build API URL
-      let apiUrl;
-
-      if (filterId) {
-        apiUrl = \`/api/data?filter_id=\${filterId}&group_by=\${groupBy}\`;
-      } else {
-        apiUrl = \`/api/data?group_by=\${groupBy}\`;
-        if (sprintCount) {
-          apiUrl += \`&sprints=\${sprintCount}\`;
-        }
+      let apiUrl = '/api/data';
+      if (sprintCount) {
+        apiUrl += \`?sprints=\${sprintCount}\`;
       }
 
       statusEl.className = 'loading';

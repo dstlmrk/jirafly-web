@@ -106,9 +106,7 @@ docker-compose logs -f       # View logs
 - `sprints` - Number of sprints to display
 
 **API parameters** (`/api/data`):
-- `group_by` - "sprint" or "fix_version" (default: sprint)
-- `sprints` - Override default sprint count
-- `filter_id` - Use custom Jira filter instead of team-based query
+- `sprints` - Override default sprint count (default: 6)
 
 ### Authentication Architecture
 

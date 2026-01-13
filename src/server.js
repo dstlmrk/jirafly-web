@@ -3,7 +3,6 @@ const express = require('express');
 const JiraClient = require('./jira-client');
 const dataProcessor = require('./data-processor');
 const { generateHTML } = require('./html-template');
-const { GROUP_BY_OPTIONS } = require('./config');
 
 const app = express();
 const PORT = parseInt(process.env.PORT);
@@ -55,40 +54,14 @@ app.get('/', (req, res) => {
 // API endpoint for Jira data
 app.get('/api/data', async (req, res) => {
   try {
-    // Validate group_by parameter - required
-    const groupBy = req.query.group_by;
-    const validGroupByOptions = Object.values(GROUP_BY_OPTIONS);
-    if (!groupBy) {
-      return res.status(400).json({
-        error: `Missing required group_by parameter. Must be one of: ${validGroupByOptions.join(', ')}`
-      });
-    }
-    if (!validGroupByOptions.includes(groupBy)) {
-      return res.status(400).json({
-        error: `Invalid group_by parameter. Must be one of: ${validGroupByOptions.join(', ')}`
-      });
-    }
-
     // Parse sprints parameter (optional, defaults to config value)
     const requestedSprintCount = req.query.sprints ? parseInt(req.query.sprints) : null;
 
-    let issues;
-    let sprintCount = 0;
-    let currentVersion = null;
-
-    if (req.query.filter_id) {
-      // Optional: Use specific filter_id
-      const filterId = parseInt(req.query.filter_id);
-      console.log(`[API] Request: filter_id=${filterId}, group_by=${groupBy}`);
-      issues = await jiraClient.fetchIssuesByFilter(filterId);
-    } else {
-      // Default: All teams issues
-      console.log(`[API] Request: All teams (auto sprint filtering), group_by=${groupBy}, sprints=${requestedSprintCount || 'default'}`);
-      const result = await jiraClient.fetchAllTeamsIssues(requestedSprintCount);
-      issues = result.issues;
-      sprintCount = result.sprintCount;
-      currentVersion = result.currentVersion;
-    }
+    console.log(`[API] Request: All teams, sprints=${requestedSprintCount || 'default'}`);
+    const result = await jiraClient.fetchAllTeamsIssues(requestedSprintCount);
+    const issues = result.issues;
+    const sprintCount = result.sprintCount;
+    const currentVersion = result.currentVersion;
 
     // Add team information to each issue based on labels
     const { TEAMS } = require('./config');
@@ -100,9 +73,9 @@ app.get('/api/data', async (req, res) => {
       issue.team = teamLabel || 'Unknown';
     });
 
-    // Process data for all teams combined
-    const allProcessedData = dataProcessor.processIssues(issues, groupBy);
-    const allTableData = dataProcessor.prepareTableData(issues, groupBy);
+    // Process data for all teams combined (always group by sprint)
+    const allProcessedData = dataProcessor.processIssues(issues, 'sprint');
+    const allTableData = dataProcessor.prepareTableData(issues, 'sprint');
 
     // Process data for each team separately
     const teamData = {};
@@ -110,8 +83,8 @@ app.get('/api/data', async (req, res) => {
       const teamIssues = issues.filter(issue => issue.team === teamLabel);
       if (teamIssues.length > 0) {
         teamData[teamLabel] = {
-          processedData: dataProcessor.processIssues(teamIssues, groupBy),
-          tableData: dataProcessor.prepareTableData(teamIssues, groupBy)
+          processedData: dataProcessor.processIssues(teamIssues, 'sprint'),
+          tableData: dataProcessor.prepareTableData(teamIssues, 'sprint')
         };
       }
     });

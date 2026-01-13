@@ -48,7 +48,7 @@ docker-compose logs -f       # View logs
 2. **Server** (`src/server.js`) → validates params, calls JiraClient
 3. **JiraClient** (`src/jira-client.js`) → fetches issues from Jira:
    - Fetches all teams (Serenity, Falcon, Discovery, Kosmik)
-   - Paginates to find all historical sprints
+   - Optimized pagination (2 pages for 6 sprints, stops early when enough found)
    - Filters to current sprint + 1 future + N historical
 4. **DataProcessor** (`src/data-processor.js`) → categorizes and aggregates issues
 5. **Server** → returns processed JSON to frontend (all teams + per-team data)
@@ -65,7 +65,7 @@ docker-compose logs -f       # View logs
 - Always excludes Epic and Sub-task issue types via JQL
 - **Sprint detection**: Parses end dates from sprint names, determines current sprint
 - **Max future sprint**: Only includes current + 1 future sprint (configurable)
-- **Paginated sprint analysis**: Fetches multiple pages to find historical sprints
+- **Optimized fetching**: Only fetches required fields (not `*all`), minimal pagination
 
 **`src/data-processor.js`** - Issue categorization and aggregation
 - **Categories** (in priority order):
@@ -97,13 +97,14 @@ docker-compose logs -f       # View logs
   - Fix version mismatch highlighting
   - Status badges (Done=green, In Review=yellow)
 - Team toggle button (updates URL for sharing)
+- Dark mode toggle
 - JetBrains Mono font throughout
 
 ### URL Parameters
 
 **Frontend parameters** (passed to browser):
 - `team` - Filter by team (serenity, falcon, discovery, kosmik) - short names accepted
-- `sprints` - Number of sprints to display
+- `sprints` - Number of sprints to display (default: 6)
 
 **API parameters** (`/api/data`):
 - `sprints` - Override default sprint count (default: 6)
@@ -134,17 +135,29 @@ determineCurrentVersion(versionMap, sortedVersions) {
 }
 ```
 
-### Pagination for Sprint Analysis
+### Optimized Pagination for Sprint Analysis
 ```javascript
-// Dynamic page count based on requested sprints (more sprints = more pages needed)
-const maxPages = Math.max(5, Math.ceil(sprintCountToUse * 1.5));
+// Default 6 sprints: max 2 pages (200 issues)
+// Larger requests scale up proportionally
+const basePages = 2;
+const maxPages = sprintCountToUse <= 6 ? basePages : Math.ceil(sprintCountToUse / 3);
 
-// Fetches multiple pages to find all historical sprints
-do {
-  const response = await client.get('/rest/api/3/search/jql', { params });
-  // Count unique sprints found
-  // Continue until maxPages or no more data
-} while (pageCount < maxPages && nextPageToken);
+// Stop early if enough sprints found
+if (foundSprintCount >= minSprintsNeeded) {
+  console.log(`Found enough sprints, stopping pagination`);
+  break;
+}
+```
+
+### Optimized Field Fetching
+```javascript
+// Only fetch fields we actually need (much faster than '*all')
+const REQUIRED_FIELDS = [
+  'summary', 'issuetype', 'status', 'assignee', 'labels',
+  'fixVersions', 'timetracking',
+  'customfield_10000',  // Sprint
+  'customfield_11605'   // HLE
+].join(',');
 ```
 
 ### Table Data Sorting
@@ -185,7 +198,7 @@ AUTH_PASSWORD=secret         # optional, enables basic auth
 
 **Sprint date parsing**: Dates in sprint names don't include year and may have spaces (e.g., "6. 1." for January 6). Regex uses `[\d.\s]+` to handle both formats. Code handles year wrap-around by checking if date would be >6 months in future.
 
-**Pagination for sprint discovery**: First 100 issues might not contain all historical sprints. Code dynamically calculates max pages based on requested sprint count (1.5x sprints requested, minimum 5 pages).
+**Optimized pagination**: Default 2 pages (200 issues) for 6 sprints. Stops early when enough sprints found. Scales up for larger sprint requests.
 
 **Max future sprint**: Only current + 1 future sprint included to avoid showing sprints too far ahead.
 

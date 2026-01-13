@@ -1,39 +1,40 @@
 # Jirafly Web
 
-Webová aplikace pro analýzu distribuce Jira tasků týmů (Serenity, Falcon, Discovery, Kosmik) podle kategorií a sprintů.
+Web application for analyzing Jira task distribution across teams (Serenity, Falcon, Discovery, Kosmik) by categories and sprints.
 
-## Popis
+## Description
 
-Jirafly automaticky stahuje tasky z projektu KNJ pro všechny týmy, roztřídí je do kategorií (Excluded, Maintenance, Bug, Product) a zobrazí jejich rozložení ve dvou interaktivních grafech + detailní tabulce tasků.
+Jirafly automatically fetches tasks from the KNJ project for all teams, categorizes them (Excluded, Maintenance, Bug, Product) and displays their distribution in two interactive charts + a detailed task table.
 
-1. **Procentuální rozložení** - poměr kategorií v jednotlivých sprintech + průměr (podle HLE)
-2. **Absolutní HLE hodnoty** - součty High Level Estimate hodnot podle kategorií + průměr
-3. **Detailní tabulka** - seznam všech tasků s HLE, tracked time, statusem
+1. **Percentage Distribution** - category ratio per sprint + average (by HLE)
+2. **Absolute HLE Values** - High Level Estimate sums by category + average
+3. **Detailed Table** - list of all tasks with HLE, tracked time, status
 
-## Hlavní funkce
+## Key Features
 
-- **Multi-team podpora** - Serenity, Falcon, Discovery, Kosmik
-- **Team toggle** - přepínání mezi týmy (URL parametr pro sdílení)
-- **Konfigurovatelný počet sprintů** - URL parametr `sprints`
-- **Chytrá detekce sprintů** - automaticky detekuje aktuální sprint podle data konce a zobrazuje pouze aktuální + 1 budoucí sprint
-- **Barevné kódování** - HLE nula (červená), překročený čas (oranžová/červená)
-- **Interaktivní grafy** - Chart.js s tooltips a legendou
-- **Hot reload** - okamžité zobrazení změn při vývoji
+- **Multi-team support** - Serenity, Falcon, Discovery, Kosmik
+- **Team toggle** - switch between teams (URL parameter for sharing)
+- **Configurable sprint count** - URL parameter `sprints`
+- **Smart sprint detection** - automatically detects current sprint by end date and shows only current + 1 future sprint
+- **Color coding** - zero HLE (red), exceeded time (orange/red)
+- **Interactive charts** - Chart.js with tooltips and legend
+- **Dark mode** - toggle between light and dark themes
+- **Hot reload** - instant changes during development
 
-## Požadavky
+## Requirements
 
-- **Node.js** 18.0.0 nebo vyšší (pro lokální vývoj)
-- **Docker** 20.10+ (doporučeno)
-- **Jira API Token** - vygenerovat v Jira nastavení
-- **Jira Email** - email propojený s Jira účtem
+- **Node.js** 18.0.0 or higher (for local development)
+- **Docker** 20.10+ (recommended)
+- **Jira API Token** - generate in Jira settings
+- **Jira Email** - email linked to Jira account
 
-## Rychlý start
+## Quick Start
 
-### S Dockerem (doporučeno)
+### With Docker (recommended)
 
-1. **Nakonfiguruj `.env` soubor**:
+1. **Configure `.env` file**:
    ```env
-   JIRA_URL=https://mallpay.atlassian.net/
+   JIRA_URL=https://your-instance.atlassian.net/
    JIRA_EMAIL=your.email@example.com
    JIRA_API_TOKEN=your_api_token_here
    PORT=3000
@@ -41,137 +42,137 @@ Jirafly automaticky stahuje tasky z projektu KNJ pro všechny týmy, roztřídí
    AUTH_PASSWORD=secret       # optional - basic auth
    ```
 
-2. **Spusť aplikaci**:
+2. **Run the application**:
    ```bash
-   docker-compose build --no-cache
+   docker-compose build
    docker-compose up
    ```
 
-3. **Otevři prohlížeč**: `http://localhost:3000`
+3. **Open browser**: `http://localhost:3000`
 
-### Bez Dockeru
+### Without Docker
 
-1. **Nainstaluj závislosti**:
+1. **Install dependencies**:
    ```bash
    npm install
    ```
 
-2. **Nakonfiguruj `.env`** (viz výše)
+2. **Configure `.env`** (see above)
 
-3. **Spusť dev server**:
+3. **Run dev server**:
    ```bash
    npm run dev
    ```
 
-4. **Otevři prohlížeč**: `http://localhost:3000`
+4. **Open browser**: `http://localhost:3000`
 
-## Použití
+## Usage
 
-### Základní použití
+### Basic Usage
 
-1. Otevři `http://localhost:3000`
-2. Data se načtou automaticky (všechny týmy, 6 sprintů)
-3. Používej **tlačítko vpravo nahoře** pro přepínání mezi týmy
+1. Open `http://localhost:3000`
+2. Data loads automatically (all teams, 6 sprints)
+3. Use the **button in top right** to switch between teams
 
-### URL parametry
+### URL Parameters
 
 ```
-http://localhost:3000/                           # Všechny týmy, 6 sprintů
-http://localhost:3000/?team=serenity             # Pouze Serenity
-http://localhost:3000/?sprints=10           # 10 sprintů
+http://localhost:3000/                        # All teams, 6 sprints
+http://localhost:3000/?team=serenity          # Serenity only
+http://localhost:3000/?sprints=10             # 10 sprints
 http://localhost:3000/?team=falcon&sprints=4
 ```
 
-**Parametry**:
-- `team` - filtr týmu (serenity, falcon, discovery, kosmik)
-- `sprints` - počet sprintů (default: 6)
+**Parameters**:
+- `team` - filter by team (serenity, falcon, discovery, kosmik)
+- `sprints` - number of sprints (default: 6)
 
-## Kategorie tasků
+## Task Categories
 
-Aplikace třídí tasky do 4 kategorií (v pořadí priority):
+The application sorts tasks into 4 categories (in priority order):
 
-1. **Excluded** (magenta) - obsahuje label `RatioExcluded` nebo `Bughunting`
-2. **Maintenance** (modrá) - obsahuje label `Maintenance`
-3. **Bug** (červená) - typ issue je `Bug`
-4. **Product** (zelená) - všechny ostatní (výchozí)
+1. **Excluded** (magenta) - has label `RatioExcluded` or `Bughunting`
+2. **Maintenance** (blue) - has label `Maintenance`
+3. **Bug** (red) - issue type is `Bug`
+4. **Product** (green) - everything else (default)
 
-**První shoda vyhrává!** Pokud má task label Maintenance a zároveň je typu Bug, je zařazen jako Maintenance.
+**First match wins!** If a task has Maintenance label and is also type Bug, it's categorized as Maintenance.
 
-**Poznámka**: Excluded tasky se nezapočítávají do procentuálního grafu (100% = Maintenance + Bug + Product).
+**Note**: Excluded tasks are not counted in percentage chart (100% = Maintenance + Bug + Product).
 
-## Tabulka tasků
+## Task Table
 
-Tabulka zobrazuje:
-- **Sprint** - číslo sprintu (seskupené, oddělené šedou čárou)
-- **Assignee** - přiřazená osoba (seskupené v rámci sprintu)
-- **Task** - typ badge, klíč a název (zkráceno na 80 znaků)
-- **HLE** - High Level Estimate (červená 0 = chybí odhad)
-- **Tracked** - zalogovaný čas (oranžová >2x HLE, červená >3x HLE)
-- **Fix Version** - verze (červená pokud nesedí se sprintem)
-- **Status** - stav tasku (zelená Done/Merged, žlutá In Review)
+The table displays:
+- **Sprint** - sprint number (grouped, separated by gray line)
+- **Assignee** - assigned person (grouped within sprint)
+- **Task** - type badge, key and title (truncated to 80 chars)
+- **HLE** - High Level Estimate (red 0 = missing estimate)
+- **Tracked** - logged time (orange >2x HLE, red >3x HLE)
+- **Fix Version** - version (red if doesn't match sprint)
+- **Status** - task status (green Done/Merged, yellow In Review)
 
-**Typ badge barvy**:
-- Bug - červený badge
-- Analysis - tmavě šedý badge
-- Ostatní - světle šedý badge
+**Type badge colors**:
+- Bug - red badge
+- Analysis - dark gray badge
+- Other - light gray badge
 
 ## Docker
 
 ```bash
-# První spuštění
-docker-compose build --no-cache
+# First run
+docker-compose build
 docker-compose up
 
-# Další spuštění
+# Subsequent runs
 docker-compose up
 
-# Zastavení
+# Stop
 docker-compose down
 
-# Logy
+# Logs
 docker-compose logs -f
 ```
 
 ## API Endpoints
 
 ### `GET /`
-Vrátí HTML stránku s UI
+Returns HTML page with UI
 
 ### `GET /api/data`
-Stáhne a zpracuje tasky všech týmů
+Fetches and processes tasks for all teams
 
-**Parametry**:
-- `sprints` (number, optional) - počet sprintů (default: 6)
+**Parameters**:
+- `sprints` (number, optional) - number of sprints (default: 6)
 
 ### `GET /health`
 Health check endpoint
 
-## Bezpečnost
+## Security
 
-- `.env` je v `.gitignore` - nebude commitnutý
-- Frontend volá jen `/api/data` endpoint
-- Server má Basic Auth pro Jira API
-- Žádné credentials v error messages
+- `.env` is in `.gitignore` - won't be committed
+- Frontend only calls `/api/data` endpoint
+- Server uses Basic Auth for Jira API
+- No credentials in error messages
 
-## Struktura projektu
+## Project Structure
 
 ```
 jirafly-web/
 ├── src/
 │   ├── server.js           # Express server + API endpoints
-│   ├── jira-client.js      # Jira API, detekce sprintů, dynamická paginace
-│   ├── data-processor.js   # Kategorizace a agregace
-│   ├── html-template.js    # Frontend s Chart.js + tabulka
-│   └── config.js           # Konfigurace (field IDs, barvy, týmy)
-├── tests/                  # Testy
+│   ├── jira-client.js      # Jira API, sprint detection, optimized pagination
+│   ├── data-processor.js   # Categorization and aggregation
+│   ├── html-template.js    # Frontend with Chart.js + table
+│   └── config.js           # Configuration (field IDs, colors, teams)
+├── tests/                  # Tests
 ├── Dockerfile              # Docker image
 ├── docker-compose.yml      # Docker Compose
 ├── .env                    # CREDENTIALS - GITIGNORED!
-├── CLAUDE.md               # Technická dokumentace
+├── CLAUDE.md               # Technical documentation
 └── README.md
 ```
 
-## Technologie
+## Technology
 
 - **Backend**: Node.js 20, Express.js
 - **Frontend**: Vanilla JavaScript, Chart.js 4.x

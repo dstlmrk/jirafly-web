@@ -1,5 +1,18 @@
 const axios = require('axios');
-const { JIRA_CONFIG, TEAMS, TEAM_SERENITY, JQL_FILTERS, VersionUtils } = require('./config');
+const { JIRA_CONFIG, CUSTOM_FIELDS, TEAMS, TEAM_SERENITY, JQL_FILTERS, VersionUtils } = require('./config');
+
+// Only fetch fields we actually need (much faster than '*all')
+const REQUIRED_FIELDS = [
+  'summary',
+  'issuetype',
+  'status',
+  'assignee',
+  'labels',
+  'fixVersions',
+  'timetracking',
+  CUSTOM_FIELDS.SPRINT,
+  CUSTOM_FIELDS.HLE
+].join(',');
 
 /**
  * Jira API client for fetching issues
@@ -105,7 +118,7 @@ class JiraClient {
       const params = {
         jql,
         maxResults: maxResults.toString(),
-        fields: '*all'
+        fields: REQUIRED_FIELDS
       };
 
       // Add nextPageToken if provided (for pagination)
@@ -502,15 +515,21 @@ class JiraClient {
     const teamLabels = allTeams.map(t => `labels = "${t.label}"`).join(' OR ');
     const sprintAnalysisJql = `project = "${TEAM_SERENITY.project}" AND (${teamLabels}) AND sprint is not EMPTY AND ${JQL_FILTERS.EXCLUDE_TYPES} ORDER BY updated DESC`;
 
-    // Calculate pages needed - more sprints requested = more pages needed
-    // Each page has ~100 issues, and we need to cover gaps in sprint history
-    const maxPages = Math.max(5, Math.ceil(sprintCountToUse * 1.5));
-    console.log(`[Jira] Fetching issues (sprint field only) for all teams to analyze sprints (target: ${sprintCountToUse} sprints, max pages: ${maxPages})`);
+    // Calculate pages needed - start small, only fetch more for larger sprint requests
+    // Default 6 sprints: 2 pages (200 issues) is usually enough
+    // For more sprints, scale up proportionally
+    const basePages = 2;
+    const maxPages = sprintCountToUse <= 6 ? basePages : Math.ceil(sprintCountToUse / 3);
+    const minSprintsNeeded = sprintCountToUse + 2; // Need a few extra for filtering
+
+    console.log(`[Jira] Fetching issues for sprint analysis (target: ${sprintCountToUse} sprints, max pages: ${maxPages})`);
+    console.log(`[Jira] JQL: ${sprintAnalysisJql}`);
 
     // Paginate through results to find all sprints
     const allSprintAnalysisIssues = [];
     let nextPageToken = null;
     let pageCount = 0;
+    let foundSprintCount = 0;
 
     do {
       pageCount++;
@@ -529,17 +548,23 @@ class JiraClient {
 
       // Count unique sprints found so far
       const tempSprintMap = this.extractSprintsFromIssues(allSprintAnalysisIssues);
-      const foundSprintCount = new Set(Array.from(tempSprintMap.values()).map(s => s.version.full)).size;
+      foundSprintCount = new Set(Array.from(tempSprintMap.values()).map(s => s.version.full)).size;
 
       nextPageToken = response.data.nextPageToken;
-      console.log(`[Jira] Page ${pageCount}: fetched ${pageIssues.length} issues, found ${foundSprintCount} unique sprints so far`);
+      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues, ${foundSprintCount} sprints found`);
+
+      // Stop early if we have enough sprints
+      if (foundSprintCount >= minSprintsNeeded) {
+        console.log(`[Jira] Found enough sprints (${foundSprintCount} >= ${minSprintsNeeded}), stopping pagination`);
+        break;
+      }
 
       if (!nextPageToken || response.data.isLast) {
         break;
       }
     } while (pageCount < maxPages);
 
-    console.log(`[Jira] Fetched ${allSprintAnalysisIssues.length} issues for sprint analysis across all teams (${pageCount} pages)`);
+    console.log(`[Jira] Sprint analysis: ${allSprintAnalysisIssues.length} issues, ${foundSprintCount} sprints (${pageCount} pages)`);
 
     // Step 2-4: Extract sprints, group by version, sort
     const sprintMap = this.extractSprintsFromIssues(allSprintAnalysisIssues);

@@ -2,7 +2,7 @@ services:
   jirafly-web:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     container_name: jirafly-web
     ports:
       - "3000:3000"

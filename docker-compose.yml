@@ -1,50 +1,17 @@
-version: '3.8'
-
 services:
   jirafly-web:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: jirafly-web:latest
+      dockerfile: Dockerfile.dev
     container_name: jirafly-web
-    restart: unless-stopped
-
-    # Port mapping
     ports:
-      - "${PORT:-3000}:3000"
-
-    # Environment variables from .env file
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - JIRA_URL=${JIRA_URL}
-      - JIRA_EMAIL=${JIRA_EMAIL}
-      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
-
-    # Load environment variables from .env file
+      - "3000:3000"
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - /app/node_modules
     env_file:
       - .env
-
-    # Health check
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-    # Logging configuration
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-    # Security options
-    security_opt:
-      - no-new-privileges:true
-
-    # Read-only root filesystem (except /tmp)
-    read_only: true
-    tmpfs:
-      - /tmp
+    environment:
+      - NODE_ENV=development
+      - PORT=3000

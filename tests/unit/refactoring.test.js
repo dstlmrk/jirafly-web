@@ -87,7 +87,7 @@ console.log('');
 // Test 5: HTML Template
 console.log('Test 5: HTML Template Generation');
 try {
-  const html = generateHTML();
+  const html = generateHTML({ jiraUrl: 'https://example.atlassian.net' });
   console.log('✅ HTML generated:', html.length > 1000 ? 'OK' : 'FAIL');
   console.log('✅ Contains CSS:', html.includes('body {') ? 'OK' : 'FAIL');
   console.log('✅ Contains Chart.js:', html.includes('chart.js') ? 'OK' : 'FAIL');

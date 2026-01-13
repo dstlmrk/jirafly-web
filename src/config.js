@@ -35,7 +35,7 @@ const CATEGORY_ORDER = Object.freeze([
 // Label Definitions
 const LABELS = Object.freeze({
   EXCLUDED: ['RatioExcluded', 'Bughunting'],
-  MAINTENANCE: ['Maintenance', 'DevOps']
+  MAINTENANCE: ['Maintenance']
 });
 
 // Grouping Options
@@ -46,10 +46,64 @@ const GROUP_BY_OPTIONS = Object.freeze({
 
 // Chart Colors
 const CHART_COLORS = Object.freeze({
-  [CATEGORIES.EXCLUDED]: '#FFFF99',    // light yellow
-  [CATEGORIES.MAINTENANCE]: '#87CEEB', // light blue
-  [CATEGORIES.BUG]: '#FFC0CB',         // light pink
-  [CATEGORIES.PRODUCT]: '#98FB98'      // light green
+  [CATEGORIES.EXCLUDED]: '#f9a8d4',    // magenta
+  [CATEGORIES.MAINTENANCE]: '#93c5fd', // blue
+  [CATEGORIES.BUG]: '#fca5a5',         // red
+  [CATEGORIES.PRODUCT]: '#86efac'      // green
+});
+
+// Team Configuration Defaults
+const TEAM_DEFAULTS = Object.freeze({
+  project: 'KNJ',
+  boardId: 102,
+  sprintCount: 6
+});
+
+// Team Configurations
+const TEAMS = Object.freeze({
+  SERENITY: { name: 'TeamSerenity', label: 'TeamSerenity', ...TEAM_DEFAULTS },
+  KOSMIK: { name: 'TeamKosmik', label: 'TeamKosmik', ...TEAM_DEFAULTS },
+  FALCON: { name: 'TeamFalcon', label: 'TeamFalcon', ...TEAM_DEFAULTS },
+  DISCOVERY: { name: 'TeamDiscovery', label: 'TeamDiscovery', ...TEAM_DEFAULTS }
+});
+
+const TEAM_SERENITY = TEAMS.SERENITY;
+
+// JQL Query Filters
+const JQL_FILTERS = Object.freeze({
+  EXCLUDE_TYPES: 'type != Epic AND type != Sub-task',
+  EXCLUDE_CLOSED: 'status != Closed',
+  EXCLUDE_TYPES_AND_CLOSED: 'type != Epic AND type != Sub-task AND status != Closed'
+});
+
+// Version Utilities
+const VersionUtils = Object.freeze({
+  parse(versionStr) {
+    const parts = versionStr.split('.').map(Number);
+    if (parts.length < 2) {
+      throw new Error(`Invalid version string: ${versionStr}. Expected format X.Y`);
+    }
+    const [major, minor] = parts;
+    if (isNaN(major) || isNaN(minor)) {
+      throw new Error(`Invalid version string: ${versionStr}. Expected numeric values`);
+    }
+    return { major, minor };
+  },
+  compare(a, b) {
+    if (typeof a !== 'string' && typeof a !== 'object') {
+      throw new Error(`compare requires string or object, got ${typeof a}`);
+    }
+    if (typeof b !== 'string' && typeof b !== 'object') {
+      throw new Error(`compare requires string or object, got ${typeof b}`);
+    }
+    const vA = typeof a === 'string' ? this.parse(a) : a;
+    const vB = typeof b === 'string' ? this.parse(b) : b;
+    if (vA.major !== vB.major) return vA.major - vB.major;
+    return vA.minor - vB.minor;
+  },
+  sort(versions) {
+    return [...versions].sort((a, b) => this.compare(a, b));
+  }
 });
 
 // Other Constants
@@ -63,5 +117,10 @@ module.exports = {
   LABELS,
   GROUP_BY_OPTIONS,
   CHART_COLORS,
+  TEAM_DEFAULTS,
+  TEAMS,
+  TEAM_SERENITY,
+  JQL_FILTERS,
+  VersionUtils,
   UNGROUPED
 };

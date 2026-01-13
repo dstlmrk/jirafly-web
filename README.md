@@ -1,215 +1,136 @@
-# 🦋 Jirafly Web
+# Jirafly Web
 
-Webová aplikace pro analýzu distribuce Jira tasků podle kategorií a fix verzí/sprintů.
+Webová aplikace pro analýzu distribuce Jira tasků týmů (Serenity, Falcon, Discovery, Kosmik) podle kategorií a sprintů.
 
 ## Popis
 
-Jirafly stahuje tasky z Jiry přes API, roztřídí je do kategorií (Excluded, Maintenance, Bug, Product) a zobrazí jejich rozložení ve dvou interaktivních grafech:
+Jirafly automaticky stahuje tasky z projektu KNJ pro všechny týmy, roztřídí je do kategorií (Excluded, Maintenance, Bug, Product) a zobrazí jejich rozložení ve dvou interaktivních grafech + detailní tabulce tasků.
 
-1. **Procentuální rozložení** - poměr kategorií v jednotlivých verzích/sprintech
-2. **Absolutní HLE hodnoty** - součty High Level Estimate hodnot podle kategorií
+1. **Procentuální rozložení** - poměr kategorií v jednotlivých sprintech + průměr (podle HLE)
+2. **Absolutní HLE hodnoty** - součty High Level Estimate hodnot podle kategorií + průměr
+3. **Detailní tabulka** - seznam všech tasků s HLE, tracked time, statusem
 
-## Funkce
+## Hlavní funkce
 
-- ✅ Stahování tasků z Jira filtru přes REST API
-- ✅ Automatická kategorizace podle labelů a typu
-- ✅ Seskupení podle fix verze nebo sprintu
-- ✅ Interaktivní grafy s Chart.js
-- ✅ Vyloučení Epic tasků
-- ✅ Paginace pro velké datasety
-- ✅ Bezpečné uložení credentials na serveru
+- **Multi-team podpora** - Serenity, Falcon, Discovery, Kosmik
+- **Team toggle** - přepínání mezi týmy (URL parametr pro sdílení)
+- **Konfigurovatelný počet sprintů** - URL parametr `sprints`
+- **Chytrá detekce sprintů** - automaticky detekuje aktuální sprint podle data konce a zobrazuje pouze aktuální + 1 budoucí sprint
+- **Barevné kódování** - HLE nula (červená), překročený čas (oranžová/červená)
+- **Interaktivní grafy** - Chart.js s tooltips a legendou
+- **Hot reload** - okamžité zobrazení změn při vývoji
 
 ## Požadavky
 
-- **Node.js** 18.0.0 nebo vyšší
+- **Node.js** 18.0.0 nebo vyšší (pro lokální vývoj)
+- **Docker** 20.10+ (doporučeno)
 - **Jira API Token** - vygenerovat v Jira nastavení
 - **Jira Email** - email propojený s Jira účtem
 
-## Instalace
+## Rychlý start
 
-1. **Naklonovat repozitář** (nebo použít stávající):
-   ```bash
-   cd jirafly-web
+### S Dockerem (doporučeno)
+
+1. **Nakonfiguruj `.env` soubor**:
+   ```env
+   JIRA_URL=https://mallpay.atlassian.net/
+   JIRA_EMAIL=your.email@example.com
+   JIRA_API_TOKEN=your_api_token_here
+   PORT=3000
+   AUTH_USERNAME=admin        # optional - basic auth
+   AUTH_PASSWORD=secret       # optional - basic auth
    ```
 
-2. **Nainstalovat závislosti**:
+2. **Spusť aplikaci**:
+   ```bash
+   docker-compose build --no-cache
+   docker-compose up
+   ```
+
+3. **Otevři prohlížeč**: `http://localhost:3000`
+
+### Bez Dockeru
+
+1. **Nainstaluj závislosti**:
    ```bash
    npm install
    ```
 
-3. **Nakonfigurovat .env soubor**:
+2. **Nakonfiguruj `.env`** (viz výše)
 
-   Soubor `.env` již existuje a obsahuje:
-   ```env
-   JIRA_URL=https://mallpay.atlassian.net/
-   JIRA_EMAIL=your.email@example.com
-   JIRA_API_TOKEN=your_jira_token_here
-   PORT=3000
-   ```
-
-   ⚠️ **Důležité**: Zkontroluj, že máš správný email a token!
-
-## Spuštění
-
-### Development mode (s auto-reload):
-```bash
-npm run dev
-```
-
-### Production mode:
-```bash
-npm start
-```
-
-Server poběží na: **http://localhost:3000**
-
-## 🐳 Docker
-
-Aplikaci lze jednoduše spustit v Docker kontejneru.
-
-### Předpoklady
-- Docker 20.10+ nainstalovaný
-- Docker Compose 2.0+ (volitelné, ale doporučené)
-
-### Spuštění s Docker Compose (doporučeno)
-
-1. **Ujisti se, že máš nakonfigurovaný `.env` soubor** (viz sekce Instalace)
-
-2. **Build a spuštění jedním příkazem**:
+3. **Spusť dev server**:
    ```bash
-   docker-compose up --build
+   npm run dev
    ```
 
-3. **Spuštění na pozadí (detached mode)**:
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **Zastavení**:
-   ```bash
-   docker-compose down
-   ```
-
-5. **Zobrazení logů**:
-   ```bash
-   docker-compose logs -f
-   ```
-
-### Spuštění s čistým Dockerem
-
-1. **Build image**:
-   ```bash
-   docker build -t jirafly-web .
-   ```
-
-2. **Spuštění kontejneru**:
-   ```bash
-   docker run -d \
-     --name jirafly-web \
-     -p 3000:3000 \
-     -e JIRA_URL=https://mallpay.atlassian.net/ \
-     -e JIRA_EMAIL=your.email@example.com \
-     -e JIRA_API_TOKEN=your_token_here \
-     jirafly-web
-   ```
-
-   **Nebo s `.env` souborem**:
-   ```bash
-   docker run -d \
-     --name jirafly-web \
-     -p 3000:3000 \
-     --env-file .env \
-     jirafly-web
-   ```
-
-3. **Zobrazení logů**:
-   ```bash
-   docker logs -f jirafly-web
-   ```
-
-4. **Zastavení a odstranění**:
-   ```bash
-   docker stop jirafly-web
-   docker rm jirafly-web
-   ```
-
-### Docker vlastnosti
-
-- ✅ **Multi-stage build** - optimalizovaná velikost image (~150 MB)
-- ✅ **Non-root user** - běží jako nodejs user (bezpečnost)
-- ✅ **Health check** - automatická kontrola stavu aplikace
-- ✅ **Read-only filesystem** - zvýšená bezpečnost
-- ✅ **Logging** - rotace logů (max 10MB, 3 soubory)
-- ✅ **Alpine Linux** - minimální base image
-
-### Změna portu
-
-Pro spuštění na jiném portu než 3000:
-
-**Docker Compose:**
-```bash
-PORT=8080 docker-compose up
-```
-
-**Docker:**
-```bash
-docker run -d -p 8080:3000 --env-file .env jirafly-web
-```
+4. **Otevři prohlížeč**: `http://localhost:3000`
 
 ## Použití
 
-1. Otevři prohlížeč na `http://localhost:3000`
-2. Zadej **Filter ID** (výchozí: 18297)
-3. Vyber **Group by**:
-   - `Fix Version` - seskupí podle fixVersions
-   - `Sprint` - seskupí podle sprintů (customfield_10000)
-4. Klikni na **Load Data**
-5. Prohlédni si grafy:
-   - **Graf 1**: Procentuální rozložení kategorií
-   - **Graf 2**: Absolutní HLE hodnoty
+### Základní použití
 
-### Kategorie tasků
+1. Otevři `http://localhost:3000`
+2. Data se načtou automaticky (všechny týmy, 6 sprintů)
+3. Používej **tlačítko vpravo nahoře** pro přepínání mezi týmy
 
-Aplikace třídí tasky do 4 kategorií (v tomto pořadí priority):
-
-1. **Excluded** 🚫 - obsahuje label `RatioExcluded` nebo `Bughunting`
-2. **Maintenance** 🔧 - obsahuje label `Maintenance` nebo `DevOps`
-3. **Bug** 🐛 - typ issue je `Bug`
-4. **Product** ✨ - všechny ostatní (výchozí)
-
-## Struktura projektu
+### URL parametry
 
 ```
-jirafly-web/
-├── src/
-│   ├── server.js           # Express server
-│   ├── jira-client.js      # Jira API integrace
-│   ├── data-processor.js   # Kategorizace a agregace
-│   └── html-template.js    # HTML frontend s Chart.js
-├── package.json            # NPM dependencies
-├── Dockerfile              # Docker image definition
-├── docker-compose.yml      # Docker Compose configuration
-├── .dockerignore           # Docker build exclusions
-├── .env                    # ⚠️ CREDENTIALS - NIKDY NECOMMITOVAT!
-├── .gitignore              # Git exclusions
-└── README.md               # Dokumentace
+http://localhost:3000/                           # Všechny týmy, 6 sprintů
+http://localhost:3000/?team=serenity             # Pouze Serenity
+http://localhost:3000/?sprints=10           # 10 sprintů
+http://localhost:3000/?team=falcon&sprints=4
 ```
 
-## 🔒 Bezpečnost
+**Parametry**:
+- `team` - filtr týmu (serenity, falcon, discovery, kosmik)
+- `sprints` - počet sprintů (default: 6)
+- `filter_id` - vlastní Jira filter ID (pokročilé)
 
-**KRITICKÉ**: Přístupové údaje (JIRA_EMAIL a JIRA_API_TOKEN) jsou uloženy pouze na serveru v souboru `.env`.
+## Kategorie tasků
 
-- ✅ `.env` je v `.gitignore` - nebude commitnutý do gitu
-- ✅ Frontend volá pouze `/api/data` endpoint, nikdy ne přímo Jira
-- ✅ Credentials jsou používány pouze v backendu
-- ✅ Error messages neodhazují citlivé informace
+Aplikace třídí tasky do 4 kategorií (v pořadí priority):
 
-**Před každým commitem zkontroluj**:
+1. **Excluded** (magenta) - obsahuje label `RatioExcluded` nebo `Bughunting`
+2. **Maintenance** (modrá) - obsahuje label `Maintenance`
+3. **Bug** (červená) - typ issue je `Bug`
+4. **Product** (zelená) - všechny ostatní (výchozí)
+
+**První shoda vyhrává!** Pokud má task label Maintenance a zároveň je typu Bug, je zařazen jako Maintenance.
+
+**Poznámka**: Excluded tasky se nezapočítávají do procentuálního grafu (100% = Maintenance + Bug + Product).
+
+## Tabulka tasků
+
+Tabulka zobrazuje:
+- **Sprint** - číslo sprintu (seskupené, oddělené šedou čárou)
+- **Assignee** - přiřazená osoba (seskupené v rámci sprintu)
+- **Task** - typ badge, klíč a název (zkráceno na 80 znaků)
+- **HLE** - High Level Estimate (červená 0 = chybí odhad)
+- **Tracked** - zalogovaný čas (oranžová >2x HLE, červená >3x HLE)
+- **Fix Version** - verze (červená pokud nesedí se sprintem)
+- **Status** - stav tasku (zelená Done/Merged, žlutá In Review)
+
+**Typ badge barvy**:
+- Bug - červený badge
+- Analysis - tmavě šedý badge
+- Ostatní - světle šedý badge
+
+## Docker
+
 ```bash
-# Ověř, že .env není v gitu
-git status
+# První spuštění
+docker-compose build --no-cache
+docker-compose up
 
-# .env by NEMĚL být v seznamu změn!
+# Další spuštění
+docker-compose up
+
+# Zastavení
+docker-compose down
+
+# Logy
+docker-compose logs -f
 ```
 
 ## API Endpoints
@@ -217,54 +138,48 @@ git status
 ### `GET /`
 Vrátí HTML stránku s UI
 
-### `GET /api/data?filter_id=X&group_by=Y`
-Stáhne a zpracuje data z Jiry
+### `GET /api/data`
+Stáhne a zpracuje tasky všech týmů
 
 **Parametry**:
-- `filter_id` (number, výchozí: 18297) - ID Jira filtru
-- `group_by` (string, výchozí: "fix_version") - možnosti: "fix_version" nebo "sprint"
-
-**Response**:
-```json
-{
-  "groups": ["6.10", "6.11", "6.12"],
-  "categories": ["Excluded", "Maintenance", "Bug", "Product"],
-  "countsByGroup": {
-    "6.10": { "Excluded": 2, "Maintenance": 5, "Bug": 8, "Product": 25 }
-  },
-  "hleByGroup": {
-    "6.10": { "Excluded": 0.5, "Maintenance": 4.0, "Bug": 12.0, "Product": 48.0 }
-  },
-  "totalIssues": 150
-}
-```
+- `group_by` (string, default: "sprint") - "sprint" nebo "fix_version"
+- `sprints` (number, optional) - počet sprintů
+- `filter_id` (number, optional) - vlastní Jira filter ID
 
 ### `GET /health`
 Health check endpoint
 
-## Troubleshooting
+## Bezpečnost
 
-### "Missing required environment variables"
-- Zkontroluj, že `.env` soubor existuje
-- Ověř, že obsahuje `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`
+- `.env` je v `.gitignore` - nebude commitnutý
+- Frontend volá jen `/api/data` endpoint
+- Server má Basic Auth pro Jira API
+- Žádné credentials v error messages
 
-### "Jira API error: 401"
-- Neplatný API token nebo email
-- Vygeneruj nový token v Jira nastavení
+## Struktura projektu
 
-### "No response from Jira API"
-- Zkontroluj internetové připojení
-- Ověř, že JIRA_URL je správná
-
-### "Filter ID not found"
-- Zkontroluj, že filter s daným ID existuje
-- Ověř, že máš přístupová práva k filtru
+```
+jirafly-web/
+├── src/
+│   ├── server.js           # Express server + API endpoints
+│   ├── jira-client.js      # Jira API, detekce sprintů, dynamická paginace
+│   ├── data-processor.js   # Kategorizace a agregace
+│   ├── html-template.js    # Frontend s Chart.js + tabulka
+│   └── config.js           # Konfigurace (field IDs, barvy, týmy)
+├── tests/                  # Testy
+├── Dockerfile.dev          # Docker image
+├── docker-compose.yml      # Docker Compose
+├── .env                    # CREDENTIALS - GITIGNORED!
+├── CLAUDE.md               # Technická dokumentace
+└── README.md
+```
 
 ## Technologie
 
-- **Backend**: Node.js, Express.js
+- **Backend**: Node.js 20, Express.js
 - **Frontend**: Vanilla JavaScript, Chart.js 4.x
 - **Jira API**: REST API v3 (Basic Auth)
+- **Docker**: Alpine Linux
 
 ## License
 

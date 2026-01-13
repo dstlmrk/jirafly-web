@@ -20,7 +20,7 @@ const {
 function extractVersionNumber(versionName) {
   const versionPart = versionName.split(' ')[0];
   const match = versionPart.match(/(\d+\.\d+)/);
-  return match[1];
+  return match ? match[1] : UNGROUPED;
 }
 
 /**
@@ -60,7 +60,16 @@ function extractGroupKey(issue, groupBy) {
     items = fields.fixVersions;
   }
 
+  // Handle empty or null items
+  if (!items || items.length === 0) {
+    return UNGROUPED;
+  }
+
   const latest = getLatestByName(items);
+  if (!latest || !latest.name) {
+    return UNGROUPED;
+  }
+
   return extractVersionNumber(latest.name);
 }
 
@@ -71,10 +80,15 @@ function extractGroupKey(issue, groupBy) {
  * @returns {number} Parsed HLE value or 0
  */
 function parseHLE(hleRaw, issueKey) {
+  if (hleRaw === null || hleRaw === undefined) {
+    return 0;
+  }
+
   const hleValue = parseFloat(hleRaw);
 
   if (isNaN(hleValue)) {
     console.warn(`[DataProcessor] Invalid HLE value for issue ${issueKey}: ${hleRaw}`);
+    return 0;
   }
 
   return hleValue;
@@ -184,9 +198,135 @@ function sortGroups(countsByGroup) {
 function roundHLEValues(groups, hleByGroup) {
   for (const group of groups) {
     for (const category of CATEGORY_ORDER) {
-      hleByGroup[group][category] = Math.round(hleByGroup[group][category] * 10) / 10;
+      hleByGroup[group][category] = Math.round(hleByGroup[group][category] * 100) / 100;
     }
   }
+}
+
+/**
+ * Format seconds to "Xd Yh Zm" format
+ * Uses days when >= 8 hours (1 day = 8 hours for this purpose)
+ * @param {number} seconds - Time in seconds
+ * @returns {string} Formatted time string
+ */
+function formatTimeSpent(seconds) {
+  if (!seconds || seconds === 0) return '-';
+
+  // 1 work day = 8 hours = 28800 seconds
+  const WORK_DAY_SECONDS = 28800;
+  const WORK_HOUR_SECONDS = 3600;
+
+  const days = Math.floor(seconds / WORK_DAY_SECONDS);
+  const remainingAfterDays = seconds % WORK_DAY_SECONDS;
+  const hours = Math.floor(remainingAfterDays / WORK_HOUR_SECONDS);
+  const minutes = Math.floor((remainingAfterDays % WORK_HOUR_SECONDS) / 60);
+
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+
+  return parts.join(' ') || '0m';
+}
+
+/**
+ * Get issue type abbreviation
+ * @param {string} issueType - Full issue type name
+ * @returns {string} Single letter abbreviation
+ */
+function getTypeAbbreviation(issueType) {
+  const typeMap = {
+    'Bug': 'B',
+    'Task': 'T',
+    'Story': 'S',
+    'Analysis': 'A',
+    'Tech Debt': 'T'
+  };
+  return typeMap[issueType] || issueType.charAt(0).toUpperCase();
+}
+
+/**
+ * Prepare table data from issues
+ * @param {Array} issues - Array of Jira issue objects
+ * @param {string} groupBy - 'fix_version' or 'sprint'
+ * @returns {Array} Array of issue data for table display
+ */
+function prepareTableData(issues, groupBy) {
+  const tableData = [];
+
+  for (const issue of issues) {
+    const fields = issue.fields;
+    const groupKey = extractGroupKey(issue, groupBy);
+
+    // Get category for coloring
+    const category = categorizeIssue(issue);
+
+    // Get assignee
+    const assignee = fields.assignee?.displayName || 'Unassigned';
+
+    // Get type abbreviation and issue type
+    const issueType = fields.issuetype.name;
+    const typeAbbr = getTypeAbbreviation(issueType);
+
+    // Truncate summary to 80 chars
+    let summary = fields.summary || '';
+    if (summary.length > 80) {
+      summary = summary.substring(0, 77) + '...';
+    }
+
+    // Get HLE
+    const hle = parseHLE(fields[CUSTOM_FIELDS.HLE], issue.key);
+
+    // Get tracked time (in seconds)
+    const timeSpentSeconds = fields.timetracking?.timeSpentSeconds || 0;
+    const timeSpentFormatted = formatTimeSpent(timeSpentSeconds);
+
+    // Get fix version (latest)
+    let fixVersion = UNGROUPED;
+    if (fields.fixVersions && fields.fixVersions.length > 0) {
+      const latest = getLatestByName(fields.fixVersions);
+      if (latest && latest.name) {
+        fixVersion = extractVersionNumber(latest.name);
+      }
+    }
+
+    // Get status
+    const status = fields.status?.name || 'Unknown';
+
+    tableData.push({
+      sprint: groupKey,
+      assignee,
+      typeAbbr,
+      issueType,
+      key: issue.key,
+      summary,
+      hle: hle || 0,
+      timeSpentSeconds,
+      timeSpent: timeSpentFormatted,
+      fixVersion,
+      status,
+      category,
+      team: issue.team || 'Unknown'
+    });
+  }
+
+  // Sort by sprint (descending - newest first), assignee, key
+  tableData.sort((a, b) => {
+    // Sort sprint numerically - DESCENDING (newest first)
+    if (a.sprint !== b.sprint) {
+      if (a.sprint === UNGROUPED) return 1;
+      if (b.sprint === UNGROUPED) return -1;
+      return b.sprint.localeCompare(a.sprint, undefined, { numeric: true }); // Reversed!
+    }
+    // Then by assignee
+    if (a.assignee !== b.assignee) {
+      return a.assignee.localeCompare(b.assignee);
+    }
+    // Then by key
+    return a.key.localeCompare(b.key);
+  });
+
+  return tableData;
 }
 
 /**
@@ -219,11 +359,13 @@ function processIssues(issues, groupBy) {
 module.exports = {
   // Main functions
   processIssues,
+  prepareTableData,
 
   // Helper functions (exported for testing)
   extractVersionNumber,
   extractGroupKey,
   categorizeIssue,
+  formatTimeSpent,
 
   // Constants (exported for reference)
   CATEGORIES,

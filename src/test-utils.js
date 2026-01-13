@@ -32,12 +32,18 @@ function createJiraClient() {
 }
 
 /**
- * Make a GET request to Jira API with error handling
+ * Make a GET request to Jira API
  * @param {string} endpoint - API endpoint (e.g., '/rest/api/3/myself')
  * @param {Object} options - Additional axios options
  * @returns {Promise<Object>} Response data
  */
-async function jiraGet(endpoint, options = {}) {
+async function jiraGet(endpoint, options) {
+  if (!endpoint) {
+    throw new Error('jiraGet requires an endpoint');
+  }
+  if (!options) {
+    throw new Error('jiraGet requires options object');
+  }
   const client = createJiraClient();
 
   try {

@@ -3,7 +3,7 @@ const { jiraGet, logTestHeader, logTestResult, printItems } = require('../../src
 async function testAuth() {
   logTestHeader('Testing Jira API authentication...');
 
-  const myselfResult = await jiraGet('/rest/api/3/myself');
+  const myselfResult = await jiraGet('/rest/api/3/myself', {});
   logTestResult('Test 1: GET /rest/api/3/myself', myselfResult.success);
 
   if (myselfResult.success) {
@@ -15,7 +15,7 @@ async function testAuth() {
     return;
   }
 
-  const myFiltersResult = await jiraGet('/rest/api/3/filter/my');
+  const myFiltersResult = await jiraGet('/rest/api/3/filter/my', {});
   logTestResult('Test 2: GET /rest/api/3/filter/my', myFiltersResult.success);
 
   if (myFiltersResult.success) {
@@ -26,7 +26,7 @@ async function testAuth() {
     console.log('❌ Error:', myFiltersResult.status, myFiltersResult.error);
   }
 
-  const favFiltersResult = await jiraGet('/rest/api/3/filter/favourite');
+  const favFiltersResult = await jiraGet('/rest/api/3/filter/favourite', {});
   logTestResult('Test 3: GET /rest/api/3/filter/favourite', favFiltersResult.success);
 
   if (favFiltersResult.success) {

@@ -386,6 +386,9 @@ function prepareUnassignedTableData(issues) {
     // Get status
     const status = fields.status?.name || 'Unknown';
 
+    // Get assignee
+    const assignee = fields.assignee?.displayName || 'Unassigned';
+
     tableData.push({
       sprint,
       wsjf,
@@ -397,14 +400,23 @@ function prepareUnassignedTableData(issues) {
       dueDate,
       dueDateRaw,
       status,
-      category
+      category,
+      team: issue.team || null,
+      assignee
     });
   }
 
-  // Sort by WSJF descending (highest priority first), then by key
+  // Sort by assignee, then by WSJF descending (highest priority first), then by key
   tableData.sort((a, b) => {
+    // Assignee first (Unassigned at the end)
+    if (a.assignee !== b.assignee) {
+      if (a.assignee === 'Unassigned') return 1;
+      if (b.assignee === 'Unassigned') return -1;
+      return a.assignee.localeCompare(b.assignee);
+    }
+    // Then WSJF descending
     if (a.wsjf !== b.wsjf) {
-      return b.wsjf - a.wsjf; // Descending
+      return b.wsjf - a.wsjf;
     }
     return a.key.localeCompare(b.key);
   });

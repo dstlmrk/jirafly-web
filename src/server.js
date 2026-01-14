@@ -51,7 +51,7 @@ app.get('/', (req, res) => {
   res.send(generateHTML({ jiraUrl: process.env.JIRA_URL }));
 });
 
-app.get('/sprint-check', (req, res) => {
+app.get('/next-sprint', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(generateHTML({ jiraUrl: process.env.JIRA_URL }));
 });
@@ -114,21 +114,32 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
-// API endpoint for unassigned issues (next sprint, no team)
-app.get('/api/unassigned', async (req, res) => {
+// API endpoint for all issues in next sprint
+app.get('/api/next-sprint', async (req, res) => {
   try {
-    console.log(`[API] Request: Unassigned issues`);
-    const result = await jiraClient.fetchUnassignedIssues();
+    console.log(`[API] Request: Next sprint issues`);
+    const result = await jiraClient.fetchNextSprintIssues();
 
-    // Process data for table display
+    // Add team information to each issue based on labels
+    const { TEAMS } = require('./config');
+    const teamLabels = Object.values(TEAMS).map(t => t.label);
+
+    result.issues.forEach(issue => {
+      const labels = issue.fields.labels || [];
+      const teamLabel = labels.find(l => teamLabels.includes(l));
+      issue.team = teamLabel || null; // null means no team
+    });
+
+    // Process data for table display (team info is included from issue.team)
     const tableData = dataProcessor.prepareUnassignedTableData(result.issues);
 
-    console.log(`[API] Fetched ${result.issues.length} unassigned issues`);
+    console.log(`[API] Fetched ${result.issues.length} issues for next sprint`);
 
     res.json({
       issues: tableData,
       nextVersion: result.nextVersion,
-      totalIssues: result.issues.length
+      totalIssues: result.issues.length,
+      teams: teamLabels
     });
   } catch (error) {
     console.error('[API] Error:', error);

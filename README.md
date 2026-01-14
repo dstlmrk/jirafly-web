@@ -8,20 +8,20 @@ Jirafly automatically fetches tasks from the KNJ project for all teams, categori
 
 ### Two Pages
 
-**History** (`/`) - Task distribution analysis:
+**Overview** (`/`) - Task distribution analysis:
 1. **Percentage Distribution** - category ratio per sprint + average (by HLE)
 2. **Absolute HLE Values** - High Level Estimate sums by category + average
 3. **Detailed Table** - list of all tasks with HLE, tracked time, status
 
-**Sprint Check** (`/sprint-check`) - Unassigned tasks review:
-- Tasks from next sprint without team assignment
-- Includes Epics (unlike History page)
-- Columns: Sprint, WSJF, Task, HLE, Due Date, Status
-- Due date badges with color coding (overdue=red, soon=orange)
+**Next Sprint** (`/next-sprint`) - Next sprint planning:
+- All tasks from next sprint with team filtering (default: "No team")
+- Two charts showing distribution by team (excludes Epics)
+- Columns: Assignee, WSJF, Task, HLE (toggleable), Due Date, Status
+- Due date badges with color coding (overdue = red)
 
 ## Key Features
 
-- **Two-page navigation** - tab-style switching between History and Sprint Check
+- **Two-page navigation** - tab-style switching between Overview and Next Sprint
 - **Multi-team support** - Serenity, Falcon, Discovery, Kosmik
 - **Team toggle** - switch between teams (URL parameter for sharing)
 - **Configurable sprint count** - URL parameter `sprints`
@@ -88,14 +88,14 @@ Jirafly automatically fetches tasks from the KNJ project for all teams, categori
 ### URL Parameters
 
 ```
-http://localhost:3000/                        # History - All teams, 6 sprints
-http://localhost:3000/?team=serenity          # History - Serenity only
-http://localhost:3000/?sprints=10             # History - 10 sprints
-http://localhost:3000/?team=falcon&sprints=4  # History - Falcon, 4 sprints
-http://localhost:3000/sprint-check            # Sprint Check - unassigned tasks
+http://localhost:3000/                        # Overview - All teams, 6 sprints
+http://localhost:3000/?team=serenity          # Overview - Serenity only
+http://localhost:3000/?sprints=10             # Overview - 10 sprints
+http://localhost:3000/?team=falcon&sprints=4  # Overview - Falcon, 4 sprints
+http://localhost:3000/next-sprint             # Next Sprint - all tasks from next sprint
 ```
 
-**Parameters** (History page only):
+**Parameters** (Overview page only):
 - `team` - filter by team (serenity, falcon, discovery, kosmik)
 - `sprints` - number of sprints (default: 6)
 
@@ -114,7 +114,7 @@ The application sorts tasks into 4 categories (in priority order):
 
 ## Task Tables
 
-### History Table
+### Overview Table
 
 The table displays:
 - **Sprint** - sprint number (grouped, separated by gray line)
@@ -125,14 +125,14 @@ The table displays:
 - **Fix Version** - version (red if doesn't match sprint)
 - **Status** - task status (green Done/Merged, yellow In Review)
 
-### Sprint Check Table
+### Next Sprint Table
 
 The table displays:
-- **Sprint** - sprint number (shown on first row only)
+- **Assignee** - assigned person (grouped)
 - **WSJF** - Weighted Shortest Job First priority
 - **Task** - type badge, key and title (colored by category)
-- **HLE** - High Level Estimate (red 0 = missing estimate)
-- **Due Date** - deadline badge (red=overdue, orange=within 7 days)
+- **HLE** - High Level Estimate (toggleable, red 0 = missing estimate)
+- **Due Date** - deadline badge (red = overdue or upcoming)
 - **Status** - task status
 
 **Type badge colors**:
@@ -165,24 +165,25 @@ docker-compose logs -f
 ## API Endpoints
 
 ### `GET /`
-Returns HTML page with History view
+Returns HTML page with Overview view
 
-### `GET /sprint-check`
-Returns HTML page with Sprint Check view
+### `GET /next-sprint`
+Returns HTML page with Next Sprint view
 
 ### `GET /api/data`
-Fetches and processes tasks for all teams (History page)
+Fetches and processes tasks for all teams (Overview page)
 
 **Parameters**:
 - `sprints` (number, optional) - number of sprints (default: 6)
 
-### `GET /api/unassigned`
-Fetches tasks from next sprint without team assignment (Sprint Check page)
+### `GET /api/next-sprint`
+Fetches all tasks from next sprint with team info (Next Sprint page)
 
 **Response**:
-- `issues` - array of tasks with WSJF, HLE, due date
+- `issues` - array of tasks with WSJF, HLE, due date, team, assignee
 - `nextVersion` - next sprint version (e.g., "6.20")
 - `totalIssues` - total count
+- `teams` - available team labels
 
 ### `GET /health`
 Health check endpoint

@@ -523,35 +523,13 @@ const CSS_STYLES = `
     border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 600;
-    background: #e5e7eb;
-    color: #374151;
+    background: #fee2e2;
+    color: #dc2626;
   }
 
   body.dark .issues-table .due-badge {
-    background: #374151;
-    color: #d1d5db;
-  }
-
-  .issues-table .due-overdue {
-    background: #fee2e2;
-    color: #dc2626;
-    font-weight: 700;
-  }
-
-  body.dark .issues-table .due-overdue {
     background: #7f1d1d;
     color: #fca5a5;
-  }
-
-  .issues-table .due-soon {
-    background: #fef3c7;
-    color: #d97706;
-    font-weight: 700;
-  }
-
-  body.dark .issues-table .due-soon {
-    background: #78350f;
-    color: #fcd34d;
   }
 
   .issues-table .task-type-epic {
@@ -562,6 +540,82 @@ const CSS_STYLES = `
   body.dark .issues-table .task-type-epic {
     background: #8b5cf6;
     color: #fff;
+  }
+
+  .table-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .table-header-row .table-title {
+    margin-bottom: 0;
+  }
+
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggle-label input[type="checkbox"] {
+    display: none;
+  }
+
+  .toggle-switch {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: var(--border-color);
+    border-radius: 10px;
+    transition: background 0.2s;
+  }
+
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+
+  .toggle-label input:checked + .toggle-switch {
+    background: var(--btn-bg);
+  }
+
+  .toggle-label input:checked + .toggle-switch::after {
+    transform: translateX(16px);
+  }
+
+  body.dark .toggle-switch::after {
+    background: #1a1a1a;
+  }
+
+  body.dark .toggle-label input:checked + .toggle-switch::after {
+    background: #1a1a1a;
+  }
+
+  .issues-table .col-hle.hidden,
+  .issues-table th.col-hle.hidden,
+  .issues-table td.col-hle.hidden {
+    display: none;
+  }
+
+  .charts-note {
+    text-align: right;
+    color: var(--text-secondary);
+    font-size: 11px;
+    margin-top: 8px;
+    margin-bottom: 0;
   }
 `;
 
@@ -614,8 +668,8 @@ function generateHTML(options) {
     </div>
 
     <div class="nav-tabs">
-      <button id="tabHistory" class="nav-tab active" data-page="history">History</button>
-      <button id="tabSprintCheck" class="nav-tab" data-page="sprint-check">Sprint check</button>
+      <button id="tabHistory" class="nav-tab active" data-page="history">Overview</button>
+      <button id="tabNextSprint" class="nav-tab" data-page="next-sprint">Next sprint</button>
     </div>
 
     <div id="status">Initializing...</div>
@@ -651,12 +705,31 @@ function generateHTML(options) {
       </table>
     </div>
 
+    <div class="charts-container" id="nextSprintChartsContainer" style="display: none;">
+      <div class="chart-wrapper">
+        <div class="chart-title">Percentage Distribution by Category <span class="charts-note">(excludes Epics)</span></div>
+        <canvas id="nextSprintPercentageChart" class="chart-canvas"></canvas>
+      </div>
+
+      <div class="chart-wrapper">
+        <div class="chart-title">Absolute HLE Values by Category <span class="charts-note">(excludes Epics)</span></div>
+        <canvas id="nextSprintHleChart" class="chart-canvas"></canvas>
+      </div>
+    </div>
+
     <div class="table-wrapper" id="unassignedTableWrapper" style="display: none;">
-      <div class="table-title" id="unassignedTableTitle">Tasks Without Team</div>
+      <div class="table-header-row">
+        <div class="table-title" id="unassignedTableTitle">Tasks Without Team</div>
+        <label class="toggle-label">
+          <input type="checkbox" id="hleToggle" checked>
+          <span class="toggle-switch"></span>
+          <span>Show HLE</span>
+        </label>
+      </div>
       <table class="issues-table" id="unassignedTable">
         <thead>
           <tr>
-            <th class="col-sprint">Sprint</th>
+            <th class="col-assignee">Assignee</th>
             <th class="col-wsjf">WSJF</th>
             <th class="col-task">Task</th>
             <th class="col-hle">HLE</th>
@@ -668,17 +741,22 @@ function generateHTML(options) {
         </tbody>
       </table>
     </div>
-  </div>
+
+    </div>
 
   <script>
     let percentageChart = null;
     let hleChart = null;
+    let nextSprintPercentageChart = null;
+    let nextSprintHleChart = null;
     let allData = null; // Store all data for client-side filtering
     let rawIssues = []; // Store raw issues
-    let currentTeam = 'All'; // Current selected team
-    let availableTeams = ['All']; // Available teams
-    let currentPage = 'history'; // Current page: 'history' or 'unassigned'
-    let unassignedData = null; // Cache for unassigned data
+    let currentTeam = 'All'; // Current selected team for history page
+    let availableTeams = ['All']; // Available teams for history page
+    let currentPage = 'history'; // Current page: 'history' or 'next-sprint'
+    let nextSprintData = null; // Cache for next sprint data
+    let currentNextSprintTeam = 'NoTeam'; // Current selected team for next-sprint page
+    let availableNextSprintTeams = ['NoTeam']; // Available teams for next-sprint page
 
     const COLORS = ${JSON.stringify(CHART_COLORS)};
     const JIRA_BROWSE_URL = '${jiraBrowseUrl}';
@@ -686,8 +764,8 @@ function generateHTML(options) {
     // Page navigation functions
     function getPageFromURL() {
       const path = window.location.pathname;
-      if (path === '/sprint-check') {
-        return 'sprint-check';
+      if (path === '/next-sprint') {
+        return 'next-sprint';
       }
       return 'history';
     }
@@ -704,11 +782,11 @@ function generateHTML(options) {
         tab.classList.toggle('active', tab.dataset.page === page);
       });
 
-      // Update team button - disabled on sprint-check page, always shows "All teams"
+      // Update team button based on page
       const teamButton = document.getElementById('teamToggle');
-      if (page === 'sprint-check') {
-        teamButton.disabled = true;
-        teamButton.textContent = 'All teams';
+      if (page === 'next-sprint') {
+        teamButton.disabled = !nextSprintData;
+        updateNextSprintTeamButton(currentNextSprintTeam);
       } else {
         teamButton.disabled = !allData;
         updateTeamButton(currentTeam);
@@ -721,72 +799,162 @@ function generateHTML(options) {
     function updatePageContent() {
       const chartsContainer = document.getElementById('chartsContainer');
       const tableWrapper = document.getElementById('tableWrapper');
-      const sprintCheckTableWrapper = document.getElementById('unassignedTableWrapper');
+      const nextSprintChartsContainer = document.getElementById('nextSprintChartsContainer');
+      const nextSprintTableWrapper = document.getElementById('unassignedTableWrapper');
       const statusEl = document.getElementById('status');
 
-      if (currentPage === 'history') {
-        // Hide sprint-check content
-        sprintCheckTableWrapper.style.display = 'none';
+      // Hide all content first
+      chartsContainer.style.display = 'none';
+      tableWrapper.style.display = 'none';
+      nextSprintChartsContainer.style.display = 'none';
+      nextSprintTableWrapper.style.display = 'none';
 
+      if (currentPage === 'history') {
         // Load history data if not cached
         if (!allData) {
           loadData();
         } else {
-          // Show cached data and update status
+          // Show cached data and render if needed
+          const teamData = getDataForTeam(currentTeam);
+          if (!percentageChart || !hleChart) {
+            renderCharts(teamData);
+            renderTable(teamData.tableData);
+          }
           chartsContainer.style.display = 'grid';
           tableWrapper.style.display = 'block';
           const sprintInfo = allData.sprintCount ? \` from \${allData.sprintCount} sprints\` : '';
           const currentInfo = allData.currentVersion ? \` (current sprint \${allData.currentVersion})\` : '';
           statusEl.textContent = \`Loaded \${allData.all.totalIssues} tasks\${sprintInfo}\${currentInfo}\`;
         }
-      } else {
-        // Hide history content
-        chartsContainer.style.display = 'none';
-        tableWrapper.style.display = 'none';
-
-        // Load sprint-check data if not cached
-        if (!unassignedData) {
-          loadUnassignedData();
+      } else if (currentPage === 'next-sprint') {
+        // Load next-sprint data if not cached
+        if (!nextSprintData) {
+          loadNextSprintData();
         } else {
-          // Show cached data and update status
-          sprintCheckTableWrapper.style.display = 'block';
-          statusEl.textContent = \`Loaded \${unassignedData.totalIssues} tasks without team for sprint \${unassignedData.nextVersion}\`;
+          // Show cached data and render if needed
+          if (!nextSprintPercentageChart || !nextSprintHleChart) {
+            renderNextSprintCharts();
+          }
+          const filteredData = getNextSprintDataForTeam(currentNextSprintTeam);
+          renderNextSprintTable(filteredData);
+          nextSprintChartsContainer.style.display = 'grid';
+          nextSprintTableWrapper.style.display = 'block';
+          updateNextSprintStatus();
         }
       }
     }
 
-    async function loadUnassignedData() {
+    async function loadNextSprintData() {
       const statusEl = document.getElementById('status');
       statusEl.className = 'loading';
-      statusEl.innerHTML = '<span class="spinner"></span>Loading tasks for sprint check...';
+      statusEl.innerHTML = '<span class="spinner"></span>Loading tasks for next sprint...';
 
       try {
-        const response = await fetch('/api/unassigned');
+        const response = await fetch('/api/next-sprint');
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to load data');
         }
 
-        unassignedData = await response.json();
-        statusEl.className = '';
-        statusEl.textContent = \`Loaded \${unassignedData.totalIssues} tasks without team for sprint \${unassignedData.nextVersion}\`;
+        nextSprintData = await response.json();
 
-        renderUnassignedTable(unassignedData.issues);
+        // Check if user switched to different page during loading
+        if (currentPage !== 'next-sprint') {
+          return;
+        }
+
+        // Set available teams for next sprint (NoTeam + actual teams)
+        if (nextSprintData.teams && nextSprintData.teams.length > 0) {
+          availableNextSprintTeams = ['NoTeam', ...nextSprintData.teams];
+        }
+
+        statusEl.className = '';
+        updateNextSprintStatus();
+
+        renderNextSprintCharts();
+        const filteredData = getNextSprintDataForTeam(currentNextSprintTeam);
+        renderNextSprintTable(filteredData);
+        document.getElementById('nextSprintChartsContainer').style.display = 'grid';
         document.getElementById('unassignedTableWrapper').style.display = 'block';
+
+        // Enable team toggle button
+        document.getElementById('teamToggle').disabled = false;
       } catch (error) {
         statusEl.className = 'error';
         statusEl.textContent = \`Error: \${error.message}\`;
       }
     }
 
-    function renderUnassignedTable(tableData) {
+    function updateNextSprintStatus() {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = \`Loaded \${nextSprintData.totalIssues} tasks for sprint \${nextSprintData.nextVersion}\`;
+    }
+
+    function getNextSprintDataForTeam(team) {
+      if (!nextSprintData) return [];
+
+      if (team === 'NoTeam') {
+        return nextSprintData.issues.filter(issue => !issue.team);
+      }
+
+      return nextSprintData.issues.filter(issue => issue.team === team);
+    }
+
+    function updateNextSprintTeamButton(team) {
+      const button = document.getElementById('teamToggle');
+      if (team === 'NoTeam') {
+        button.textContent = 'No team';
+      } else {
+        // Strip "Team" prefix and add " team" suffix
+        const displayName = team.replace(/^Team/i, '');
+        button.textContent = \`\${displayName} team\`;
+      }
+    }
+
+    function toggleNextSprintTeam() {
+      const currentIndex = availableNextSprintTeams.indexOf(currentNextSprintTeam);
+      const nextIndex = (currentIndex + 1) % availableNextSprintTeams.length;
+      currentNextSprintTeam = availableNextSprintTeams[nextIndex];
+
+      updateNextSprintTeamButton(currentNextSprintTeam);
+
+      // Re-render with filtered data
+      const filteredData = getNextSprintDataForTeam(currentNextSprintTeam);
+      renderNextSprintTable(filteredData);
+    }
+
+    function toggleHleColumn() {
+      const isChecked = document.getElementById('hleToggle').checked;
+      sessionStorage.setItem('jirafly-hle-visible', isChecked);
+      applyHleVisibility(isChecked);
+    }
+
+    function applyHleVisibility(isVisible) {
+      const table = document.getElementById('unassignedTable');
+      const hleCells = table.querySelectorAll('.col-hle');
+      hleCells.forEach(cell => {
+        cell.classList.toggle('hidden', !isVisible);
+      });
+    }
+
+    function initHleToggle() {
+      const saved = sessionStorage.getItem('jirafly-hle-visible');
+      if (saved !== null) {
+        const isVisible = saved === 'true';
+        document.getElementById('hleToggle').checked = isVisible;
+        applyHleVisibility(isVisible);
+      }
+    }
+
+    function renderNextSprintTable(tableData) {
       const tbody = document.getElementById('unassignedTableBody');
       tbody.innerHTML = '';
 
+      const teamLabel = currentNextSprintTeam === 'NoTeam' ? 'Without Team' : currentNextSprintTeam.replace(/^Team/, '') + ' Team';
       document.getElementById('unassignedTableTitle').textContent =
-        \`Tasks Without Team (\${tableData.length})\`;
+        \`Tasks \${teamLabel} (\${tableData.length})\`;
 
-      let prevSprint = null;
+      let prevAssignee = null;
       tableData.forEach(row => {
         const tr = document.createElement('tr');
 
@@ -795,14 +963,16 @@ function generateHTML(options) {
           tr.classList.add('row-hle-zero');
         }
 
-        // Sprint column - only show on first occurrence
-        const sprintTd = document.createElement('td');
-        sprintTd.className = 'col-sprint';
-        if (row.sprint !== prevSprint) {
-          sprintTd.innerHTML = \`<span class="sprint-badge">\${row.sprint}</span>\`;
-          prevSprint = row.sprint;
+        // Assignee column - only show on first occurrence
+        const assigneeTd = document.createElement('td');
+        assigneeTd.className = 'col-assignee';
+        if (row.assignee !== prevAssignee) {
+          assigneeTd.textContent = row.assignee || 'Unassigned';
+          prevAssignee = row.assignee;
+        } else {
+          assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
         }
-        tr.appendChild(sprintTd);
+        tr.appendChild(assigneeTd);
 
         // WSJF column
         const wsjfTd = document.createElement('td');
@@ -833,7 +1003,9 @@ function generateHTML(options) {
 
         // HLE column
         const hleTd = document.createElement('td');
-        hleTd.className = 'col-hle';
+        const savedHle = sessionStorage.getItem('jirafly-hle-visible');
+        const hleVisible = savedHle !== null ? savedHle === 'true' : document.getElementById('hleToggle').checked;
+        hleTd.className = 'col-hle' + (hleVisible ? '' : ' hidden');
         if (!row.hle || row.hle === 0) {
           hleTd.innerHTML = '<span class="hle-zero">0</span>';
         } else {
@@ -845,17 +1017,7 @@ function generateHTML(options) {
         const dueTd = document.createElement('td');
         dueTd.className = 'col-due';
         if (row.dueDateRaw) {
-          const dueDate = new Date(row.dueDateRaw);
-          const now = new Date();
-          const diffDays = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
-
-          let dueBadgeClass = 'due-badge';
-          if (diffDays < 0) {
-            dueBadgeClass += ' due-overdue';
-          } else if (diffDays <= 7) {
-            dueBadgeClass += ' due-soon';
-          }
-          dueTd.innerHTML = \`<span class="\${dueBadgeClass}">\${row.dueDate}</span>\`;
+          dueTd.innerHTML = \`<span class="due-badge">\${row.dueDate}</span>\`;
         } else {
           dueTd.innerHTML = '<span class="empty-cell">-</span>';
         }
@@ -923,12 +1085,12 @@ function generateHTML(options) {
     }
 
     function updateChartsTheme() {
-      if (!percentageChart || !hleChart) return;
-
       const colors = getChartColors();
       const chartColors = getDarkModeChartColors();
 
-      [percentageChart, hleChart].forEach(chart => {
+      const allCharts = [percentageChart, hleChart, nextSprintPercentageChart, nextSprintHleChart].filter(c => c);
+
+      allCharts.forEach(chart => {
         // Update legend
         chart.options.plugins.legend.labels.color = colors.legendColor;
         // Update axes
@@ -1118,6 +1280,11 @@ function generateHTML(options) {
     }
 
     function toggleTeam() {
+      if (currentPage === 'next-sprint') {
+        toggleNextSprintTeam();
+        return;
+      }
+
       const currentIndex = availableTeams.indexOf(currentTeam);
       const nextIndex = (currentIndex + 1) % availableTeams.length;
       currentTeam = availableTeams[nextIndex];
@@ -1184,6 +1351,11 @@ function generateHTML(options) {
         // Store all data for client-side filtering
         allData = data;
 
+        // Check if user switched to different page during loading
+        if (currentPage !== 'history') {
+          return;
+        }
+
         // Set available teams
         if (data.teams && data.teams.length > 0) {
           availableTeams = ['All', ...data.teams];
@@ -1228,6 +1400,88 @@ function generateHTML(options) {
         ...allData.teamData[team].processedData,
         tableData: allData.teamData[team].tableData
       } : null;
+    }
+
+    function renderNextSprintCharts() {
+      if (!nextSprintData || !nextSprintData.issues) return;
+
+      // Group data by team (exclude No Team from charts)
+      const categories = ['Excluded', 'Maintenance', 'Bug', 'Product'];
+      const teams = nextSprintData.teams || [];
+      const teamNames = teams.map(t => t.replace(/^Team/, ''));
+
+      // Calculate HLE by team and category
+      const hleByTeam = {};
+      teamNames.forEach(team => {
+        hleByTeam[team] = {};
+        categories.forEach(cat => hleByTeam[team][cat] = 0);
+      });
+
+      nextSprintData.issues.forEach(issue => {
+        if (!issue.team) return; // Skip issues without team
+        if (issue.issueType === 'Epic') return; // Skip Epics
+        const teamKey = issue.team.replace(/^Team/, '');
+        const category = issue.category || 'Product';
+        const hle = issue.hle || 0;
+        if (hleByTeam[teamKey]) {
+          hleByTeam[teamKey][category] = (hleByTeam[teamKey][category] || 0) + hle;
+        }
+      });
+
+      // Prepare percentage data (exclude Excluded from 100%)
+      const percentageCategories = categories.filter(cat => cat !== 'Excluded');
+      const percentageData = {};
+      percentageCategories.forEach(cat => percentageData[cat] = []);
+
+      teamNames.forEach(team => {
+        const total = percentageCategories.reduce((sum, cat) => sum + (hleByTeam[team][cat] || 0), 0);
+        percentageCategories.forEach(cat => {
+          const perc = total > 0 ? Math.round((hleByTeam[team][cat] || 0) / total * 1000) / 10 : 0;
+          percentageData[cat].push(perc);
+        });
+      });
+
+      // Add averages
+      percentageCategories.forEach(cat => {
+        const sum = percentageData[cat].reduce((acc, val) => acc + val, 0);
+        percentageData[cat].push(sum / percentageData[cat].length);
+      });
+
+      // Prepare HLE data
+      const hleData = {};
+      categories.forEach(cat => {
+        hleData[cat] = teamNames.map(team => hleByTeam[team][cat] || 0);
+        const avg = hleData[cat].reduce((sum, val) => sum + val, 0) / hleData[cat].length;
+        hleData[cat].push(Math.round(avg * 100) / 100);
+      });
+
+      // Destroy old charts
+      if (nextSprintPercentageChart) nextSprintPercentageChart.destroy();
+      if (nextSprintHleChart) nextSprintHleChart.destroy();
+
+      const teamsWithAverage = [...teamNames, 'Average'];
+
+      const percentageCtx = document.getElementById('nextSprintPercentageChart').getContext('2d');
+      nextSprintPercentageChart = new Chart(percentageCtx, buildChartConfig(
+        teamsWithAverage, percentageCategories, percentageData,
+        {
+          min: 0,
+          max: 100,
+          ticks: { callback: value => value + '%' },
+          title: { display: true, text: 'Percentage (%) by HLE', font: { family: 'JetBrains Mono', size: 11 } }
+        },
+        value => value.toFixed(1) + '%'
+      ));
+
+      const hleCtx = document.getElementById('nextSprintHleChart').getContext('2d');
+      nextSprintHleChart = new Chart(hleCtx, buildChartConfig(
+        teamsWithAverage, categories, hleData,
+        {
+          beginAtZero: true,
+          title: { display: true, text: 'HLE Value', font: { family: 'JetBrains Mono', size: 11 } }
+        },
+        value => value.toFixed(2)
+      ));
     }
 
     function renderCharts(data) {
@@ -1452,15 +1706,19 @@ function generateHTML(options) {
       // Set up team toggle listener
       document.getElementById('teamToggle').addEventListener('click', toggleTeam);
 
+      // Set up HLE toggle listener and restore saved state
+      document.getElementById('hleToggle').addEventListener('change', toggleHleColumn);
+      initHleToggle();
+
       // Load appropriate data based on current page
       if (currentPage === 'history') {
         loadData();
-      } else {
-        loadUnassignedData();
-        // Disable team toggle on sprint-check page, show "All teams"
+      } else if (currentPage === 'next-sprint') {
+        loadNextSprintData();
+        // Initialize team toggle for next-sprint page
         const teamButton = document.getElementById('teamToggle');
-        teamButton.disabled = true;
-        teamButton.textContent = 'All teams';
+        teamButton.disabled = true; // Will be enabled after data loads
+        teamButton.textContent = 'No team';
       }
     });
   </script>

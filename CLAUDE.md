@@ -57,11 +57,11 @@ docker-compose logs -f       # View logs
 6. **Frontend** → renders two Chart.js charts + detailed task table
 7. **Frontend** → team toggle button to filter display
 
-**Sprint Check page** (`/sprint-check`):
-1. **Frontend** → calls `/api/unassigned`
-2. **JiraClient** → fetches issues from next sprint without team labels (includes Epics)
+**Next Sprint page** (`/next-sprint`):
+1. **Frontend** → calls `/api/next-sprint`
+2. **JiraClient** → fetches ALL issues from next sprint (includes Epics)
 3. **DataProcessor** → prepares table data with WSJF, due date
-4. **Frontend** → renders table with unassigned tasks
+4. **Frontend** → renders table with team toggle (default: "No team", can filter by team)
 
 ### Core Modules
 
@@ -70,8 +70,8 @@ docker-compose logs -f       # View logs
 - Supports both scoped tokens (with `JIRA_CLOUD_ID`) and unscoped tokens
 - Token-based pagination (`/rest/api/3/search/jql` with `nextPageToken`)
 - Retry logic with exponential backoff for rate limits and 5xx errors
-- **History**: Excludes Epic and Sub-task issue types, no future sprints
-- **Sprint Check**: Includes Epics, fetches from next sprint only
+- **Overview**: Excludes Epic and Sub-task issue types, no future sprints
+- **Next sprint**: Includes Epics, fetches all issues from next sprint
 - **Sprint detection**: Parses end dates from sprint names, determines current sprint
 - **Sprint caching**: Caches sprint data to avoid refetching between pages
 - **Optimized fetching**: Only fetches required fields (not `*all`), minimal pagination
@@ -84,7 +84,7 @@ docker-compose logs -f       # View logs
   4. `Product` - everything else (default)
 - **Grouping**: By sprint using `customfield_10000` array, extracts X.Y version
 - **Aggregation**: counts issues per category + sums HLE values (`customfield_11605`)
-- **Table data**: `prepareTableData()` for History, `prepareUnassignedTableData()` for Sprint Check
+- **Table data**: `prepareTableData()` for Overview, `prepareUnassignedTableData()` for Next sprint
 - **Date formatting**: `formatDueDate()` returns compact format (d.m.yyyy)
 
 **`src/config.js`** - Centralized configuration
@@ -98,18 +98,22 @@ docker-compose logs -f       # View logs
 
 **`src/html-template.js`** - Frontend generation
 - Single-page app embedded in server response
-- **Tab navigation**: History and Sprint Check pages
+- **Tab navigation**: Overview and Next sprint pages
 - **Data caching**: Caches API responses, no refetch on tab switch
-- **History page**:
+- **Overview page**:
   - Two stacked bar charts using Chart.js (both include Average column)
   - Percentage distribution by HLE (excludes Excluded category from 100%)
   - Absolute HLE values (shows effort distribution)
   - Detailed task table with sprint/assignee grouping
   - Team toggle button (updates URL for sharing)
-- **Sprint Check page**:
-  - Table with unassigned tasks from next sprint
-  - Columns: Sprint, WSJF, Task, HLE, Due Date, Status
-  - Due date badges with color coding
+- **Next sprint page**:
+  - Two stacked bar charts by team (excludes Epics in calculations)
+  - Percentage distribution and absolute HLE values
+  - Table with all tasks from next sprint
+  - Team toggle button (default: "No team", can filter by team)
+  - HLE toggle to show/hide HLE column (persisted in sessionStorage)
+  - Columns: Assignee, WSJF, Task, HLE (toggleable), Due Date, Status
+  - Due date badges with red color coding
   - Category-based title coloring
 - Dark mode toggle
 - JetBrains Mono font throughout
@@ -117,16 +121,16 @@ docker-compose logs -f       # View logs
 ### URL Parameters
 
 **Routes**:
-- `/` - History page (task distribution analysis)
-- `/sprint-check` - Sprint Check page (unassigned tasks)
+- `/` - Overview page (task distribution analysis)
+- `/next-sprint` - Next sprint page (all tasks from next sprint)
 
-**Frontend parameters** (History page only):
+**Frontend parameters** (Overview page only):
 - `team` - Filter by team (serenity, falcon, discovery, kosmik) - short names accepted
 - `sprints` - Number of sprints to display (default: 6)
 
 **API parameters**:
 - `/api/data?sprints=N` - Override default sprint count (default: 6)
-- `/api/unassigned` - No parameters, returns next sprint unassigned tasks
+- `/api/next-sprint` - Returns all tasks from next sprint with team info
 
 ### Authentication Architecture
 
@@ -197,10 +201,9 @@ Issues are sorted by: sprint (descending) → assignee → key
 - **Analysis**: Dark gray badge with white text
 - **Other types**: Light gray badge with black text
 
-### Due Date Badges (Sprint Check)
+### Due Date Badges (Next Sprint)
 - **Normal**: Gray badge
-- **Within 7 days**: Orange/yellow badge
-- **Overdue**: Red badge
+- **Overdue or upcoming**: Red badge
 
 ## Environment Variables
 
@@ -225,9 +228,9 @@ AUTH_PASSWORD=secret         # optional, enables basic auth
 
 **Optimized pagination**: Default 2 pages (200 issues) for 6 sprints. Stops early when enough sprints found. Scales up for larger sprint requests.
 
-**History page sprints**: Only current + past sprints shown (no future sprints).
+**Overview page**: Only current + past sprints shown (no future sprints).
 
-**Sprint Check page**: Shows tasks from next sprint only, without team labels.
+**Next sprint page**: Shows all tasks from next sprint, filterable by team (default: "No team").
 
 **HLE null handling**: Issues with null/undefined HLE values are treated as HLE=0 to prevent NaN aggregation bugs.
 

@@ -14,12 +14,13 @@ const REQUIRED_FIELDS = [
   CUSTOM_FIELDS.HLE
 ].join(',');
 
-// Fields for unassigned issues page (different columns)
-const UNASSIGNED_REQUIRED_FIELDS = [
+// Fields for next sprint page (different columns)
+const NEXT_SPRINT_REQUIRED_FIELDS = [
   'summary',
   'issuetype',
   'status',
   'labels',
+  'assignee',
   'duedate',
   CUSTOM_FIELDS.SPRINT,
   CUSTOM_FIELDS.HLE,
@@ -669,12 +670,10 @@ class JiraClient {
   }
 
   /**
-   * Fetch unassigned issues for the next sprint
-   * These are issues without team labels that need to be assigned
-   * @param {Object|null} cachedSprintInfo - Optional cached sprint info from history
+   * Fetch ALL issues for the next sprint (for team filtering on frontend)
    * @returns {Promise<Object>} Object with issues array and nextVersion
    */
-  async fetchUnassignedIssues() {
+  async fetchNextSprintIssues() {
     const client = this.getAxiosInstance();
     const allTeams = Object.values(TEAMS);
 
@@ -691,7 +690,7 @@ class JiraClient {
       const teamLabels = allTeams.map(t => `labels = "${t.label}"`).join(' OR ');
       const sprintAnalysisJql = `project = "${TEAM_SERENITY.project}" AND (${teamLabels}) AND sprint is not EMPTY AND ${JQL_FILTERS.EXCLUDE_TYPES} ORDER BY updated DESC`;
 
-      console.log(`[Jira] Fetching issues for sprint analysis (sprint-check)`);
+      console.log(`[Jira] Fetching issues for sprint analysis (next-sprint)`);
       const response = await client.get('/rest/api/3/search/jql', {
         params: {
           jql: sprintAnalysisJql,
@@ -727,14 +726,13 @@ class JiraClient {
     const sprintIds = nextVersionSprints.map(s => s.id);
     console.log(`[Jira] Found ${sprintIds.length} sprint(s) for version ${nextVersion.full}: ${nextVersionSprints.map(s => s.name).join(', ')}`);
 
-    // Step 2: Build JQL for unassigned issues in next sprint only (using sprint IDs)
-    const teamLabelsList = allTeams.map(t => t.label).join(', ');
-    const unassignedJql = `project IN ("BE Skip Pay", Spitzel) AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_DONE_STATES} AND labels NOT IN (${teamLabelsList}) ORDER BY cf[11737] DESC, created DESC`;
+    // Fetch ALL issues in next sprint (no team filter - filtering done on frontend)
+    const nextSprintJql = `project IN ("BE Skip Pay", Spitzel) AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_DONE_STATES} ORDER BY cf[11737] DESC, created DESC`;
 
-    console.log(`[Jira] Fetching unassigned issues`);
-    console.log(`[Jira] JQL: ${unassignedJql}`);
+    console.log(`[Jira] Fetching next sprint issues`);
+    console.log(`[Jira] JQL: ${nextSprintJql}`);
 
-    // Fetch with unassigned-specific fields
+    // Fetch with required fields
     const allIssues = [];
     let nextPageToken = null;
     let pageCount = 0;
@@ -742,9 +740,9 @@ class JiraClient {
     do {
       pageCount++;
       const params = {
-        jql: unassignedJql,
+        jql: nextSprintJql,
         maxResults: '100',
-        fields: UNASSIGNED_REQUIRED_FIELDS
+        fields: NEXT_SPRINT_REQUIRED_FIELDS
       };
       if (nextPageToken) {
         params.nextPageToken = nextPageToken;
@@ -760,9 +758,9 @@ class JiraClient {
       if (!nextPageToken || fetchResponse.data.isLast) {
         break;
       }
-    } while (pageCount < 5); // Max 5 pages for unassigned
+    } while (pageCount < 10); // Max 10 pages for next sprint
 
-    console.log(`[Jira] Fetched ${allIssues.length} unassigned issues`);
+    console.log(`[Jira] Fetched ${allIssues.length} issues for next sprint`);
 
     return {
       issues: allIssues,

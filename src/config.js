@@ -14,7 +14,8 @@ const JIRA_CONFIG = Object.freeze({
 // Custom Jira Field IDs
 const CUSTOM_FIELDS = Object.freeze({
   SPRINT: 'customfield_10000',
-  HLE: 'customfield_11605'
+  HLE: 'customfield_11605',
+  WSJF: 'customfield_11737'
 });
 
 // Issue Categories
@@ -73,7 +74,8 @@ const TEAM_SERENITY = TEAMS.SERENITY;
 const JQL_FILTERS = Object.freeze({
   EXCLUDE_TYPES: 'type != Epic AND type != Sub-task',
   EXCLUDE_CLOSED: 'status != Closed',
-  EXCLUDE_TYPES_AND_CLOSED: 'type != Epic AND type != Sub-task AND status != Closed'
+  EXCLUDE_TYPES_AND_CLOSED: 'type != Epic AND type != Sub-task AND status != Closed',
+  EXCLUDE_DONE_STATES: 'status NOT IN (DONE, Closed, Canceled)'
 });
 
 // Version Utilities

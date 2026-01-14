@@ -14,6 +14,18 @@ const REQUIRED_FIELDS = [
   CUSTOM_FIELDS.HLE
 ].join(',');
 
+// Fields for unassigned issues page (different columns)
+const UNASSIGNED_REQUIRED_FIELDS = [
+  'summary',
+  'issuetype',
+  'status',
+  'labels',
+  'duedate',
+  CUSTOM_FIELDS.SPRINT,
+  CUSTOM_FIELDS.HLE,
+  CUSTOM_FIELDS.WSJF
+].join(',');
+
 /**
  * Jira API client for fetching issues
  * Uses Basic Auth (email + API token)
@@ -33,6 +45,9 @@ class JiraClient {
     this.jiraEmail = process.env.JIRA_EMAIL;
     this.jiraToken = process.env.JIRA_API_TOKEN;
     this.jiraCloudId = process.env.JIRA_CLOUD_ID;
+
+    // Cache for sprint info (shared between endpoints)
+    this.sprintCache = null;
     this.maxRetries = JIRA_CONFIG.MAX_RETRIES;
     this.retryDelay = JIRA_CONFIG.RETRY_DELAY_MS;
     this.timeout = JIRA_CONFIG.TIMEOUT_MS;
@@ -463,9 +478,10 @@ class JiraClient {
    * @param {Array} sortedVersions - Sorted version strings
    * @param {number} sprintCount - Number of sprints to select
    * @param {boolean} useCurrentVersionFilter - Whether to filter by current version
+   * @param {boolean} includeFutureSprints - Whether to include future sprints (default: false)
    * @returns {Object} { selectedVersions, sprintIds, currentVersion }
    */
-  selectVersionsAndGetSprintIds(versionMap, sortedVersions, sprintCount, useCurrentVersionFilter = true) {
+  selectVersionsAndGetSprintIds(versionMap, sortedVersions, sprintCount, useCurrentVersionFilter = true, includeFutureSprints = false) {
     let currentVersion = null;
     let selectedVersions;
 
@@ -473,8 +489,15 @@ class JiraClient {
       currentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
       console.log(`[Jira] Current version: ${currentVersion}`);
 
-      const maxVersion = this.getMaxAllowedVersion(currentVersion);
-      console.log(`[Jira] Max allowed version: ${maxVersion.full}`);
+      let maxVersion;
+      if (includeFutureSprints) {
+        maxVersion = this.getMaxAllowedVersion(currentVersion);
+      } else {
+        // Only allow current and past versions
+        const [major, minor] = currentVersion.split('.').map(Number);
+        maxVersion = { major, minor, full: currentVersion };
+      }
+      console.log(`[Jira] Max allowed version: ${maxVersion.full} (includeFuture: ${includeFutureSprints})`);
 
       const allowedVersions = sortedVersions.filter(v => this.isVersionAllowed(v, maxVersion));
       console.log(`[Jira] Allowed versions: ${allowedVersions.join(', ')}`);
@@ -575,6 +598,9 @@ class JiraClient {
       versionMap, sortedVersions, sprintCountToUse, true
     );
 
+    // Cache sprint info for reuse by other endpoints (e.g., sprint-check)
+    this.sprintCache = { versionMap, currentVersion };
+
     // Step 6: Fetch ONLY issues from selected sprints for all teams
     const fullJql = `project = "${TEAM_SERENITY.project}" AND (${teamLabels}) AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_TYPES_AND_CLOSED}`;
     const fullIssues = await this.fetchIssuesByJQL(fullJql, `All teams (${selectedVersions.length} versions)`);
@@ -626,6 +652,123 @@ class JiraClient {
     const fullIssues = await this.fetchIssuesByJQL(fullJql, `TeamSerenity (${selectedVersions.length} versions)`);
 
     return fullIssues;
+  }
+
+  /**
+   * Calculate next version from current version
+   * @param {string} currentVersion - Current version string (e.g., "6.20")
+   * @returns {Object} Next version with major, minor, and full string
+   */
+  getNextVersion(currentVersion) {
+    const [major, minor] = currentVersion.split('.').map(Number);
+    return {
+      major,
+      minor: minor + 1,
+      full: `${major}.${minor + 1}`
+    };
+  }
+
+  /**
+   * Fetch unassigned issues for the next sprint
+   * These are issues without team labels that need to be assigned
+   * @param {Object|null} cachedSprintInfo - Optional cached sprint info from history
+   * @returns {Promise<Object>} Object with issues array and nextVersion
+   */
+  async fetchUnassignedIssues() {
+    const client = this.getAxiosInstance();
+    const allTeams = Object.values(TEAMS);
+
+    let currentVersion, nextVersion, versionMap;
+
+    if (this.sprintCache && this.sprintCache.currentVersion && this.sprintCache.versionMap) {
+      // Use cached sprint info from previous fetchAllTeamsIssues call
+      console.log(`[Jira] Using cached sprint info`);
+      currentVersion = this.sprintCache.currentVersion;
+      versionMap = this.sprintCache.versionMap;
+      nextVersion = this.getNextVersion(currentVersion);
+    } else {
+      // Step 1: Do sprint analysis to determine current version
+      const teamLabels = allTeams.map(t => `labels = "${t.label}"`).join(' OR ');
+      const sprintAnalysisJql = `project = "${TEAM_SERENITY.project}" AND (${teamLabels}) AND sprint is not EMPTY AND ${JQL_FILTERS.EXCLUDE_TYPES} ORDER BY updated DESC`;
+
+      console.log(`[Jira] Fetching issues for sprint analysis (sprint-check)`);
+      const response = await client.get('/rest/api/3/search/jql', {
+        params: {
+          jql: sprintAnalysisJql,
+          maxResults: '50',
+          fields: 'customfield_10000'
+        }
+      });
+
+      const analysisIssues = response.data.issues || [];
+      const sprintMap = this.extractSprintsFromIssues(analysisIssues);
+      const groupResult = this.groupSprintsByVersion(sprintMap);
+      versionMap = groupResult.versionMap;
+      const sortedVersions = groupResult.sortedVersions;
+
+      // Determine current version and calculate next
+      currentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
+      nextVersion = this.getNextVersion(currentVersion);
+    }
+
+    console.log(`[Jira] Current version: ${currentVersion}, next version: ${nextVersion.full}`);
+
+    // Get sprint IDs for next version
+    const nextVersionSprints = versionMap.get(nextVersion.full) || [];
+    if (nextVersionSprints.length === 0) {
+      console.log(`[Jira] No sprints found for version ${nextVersion.full}`);
+      return {
+        issues: [],
+        nextVersion: nextVersion.full,
+        currentVersion
+      };
+    }
+
+    const sprintIds = nextVersionSprints.map(s => s.id);
+    console.log(`[Jira] Found ${sprintIds.length} sprint(s) for version ${nextVersion.full}: ${nextVersionSprints.map(s => s.name).join(', ')}`);
+
+    // Step 2: Build JQL for unassigned issues in next sprint only (using sprint IDs)
+    const teamLabelsList = allTeams.map(t => t.label).join(', ');
+    const unassignedJql = `project IN ("BE Skip Pay", Spitzel) AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_DONE_STATES} AND labels NOT IN (${teamLabelsList}) ORDER BY cf[11737] DESC, created DESC`;
+
+    console.log(`[Jira] Fetching unassigned issues`);
+    console.log(`[Jira] JQL: ${unassignedJql}`);
+
+    // Fetch with unassigned-specific fields
+    const allIssues = [];
+    let nextPageToken = null;
+    let pageCount = 0;
+
+    do {
+      pageCount++;
+      const params = {
+        jql: unassignedJql,
+        maxResults: '100',
+        fields: UNASSIGNED_REQUIRED_FIELDS
+      };
+      if (nextPageToken) {
+        params.nextPageToken = nextPageToken;
+      }
+
+      const fetchResponse = await client.get('/rest/api/3/search/jql', { params });
+      const pageIssues = fetchResponse.data.issues || [];
+      allIssues.push(...pageIssues);
+
+      nextPageToken = fetchResponse.data.nextPageToken;
+      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues`);
+
+      if (!nextPageToken || fetchResponse.data.isLast) {
+        break;
+      }
+    } while (pageCount < 5); // Max 5 pages for unassigned
+
+    console.log(`[Jira] Fetched ${allIssues.length} unassigned issues`);
+
+    return {
+      issues: allIssues,
+      nextVersion: nextVersion.full,
+      currentVersion
+    };
   }
 }
 

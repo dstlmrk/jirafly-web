@@ -6,17 +6,28 @@ Web application for analyzing Jira task distribution across teams (Serenity, Fal
 
 Jirafly automatically fetches tasks from the KNJ project for all teams, categorizes them (Excluded, Maintenance, Bug, Product) and displays their distribution in two interactive charts + a detailed task table.
 
+### Two Pages
+
+**History** (`/`) - Task distribution analysis:
 1. **Percentage Distribution** - category ratio per sprint + average (by HLE)
 2. **Absolute HLE Values** - High Level Estimate sums by category + average
 3. **Detailed Table** - list of all tasks with HLE, tracked time, status
 
+**Sprint Check** (`/sprint-check`) - Unassigned tasks review:
+- Tasks from next sprint without team assignment
+- Includes Epics (unlike History page)
+- Columns: Sprint, WSJF, Task, HLE, Due Date, Status
+- Due date badges with color coding (overdue=red, soon=orange)
+
 ## Key Features
 
+- **Two-page navigation** - tab-style switching between History and Sprint Check
 - **Multi-team support** - Serenity, Falcon, Discovery, Kosmik
 - **Team toggle** - switch between teams (URL parameter for sharing)
 - **Configurable sprint count** - URL parameter `sprints`
-- **Smart sprint detection** - automatically detects current sprint by end date and shows only current + 1 future sprint
-- **Color coding** - zero HLE (red), exceeded time (orange/red)
+- **Smart sprint detection** - automatically detects current sprint by end date
+- **Data caching** - no refetch when switching tabs, only on page refresh
+- **Color coding** - zero HLE (red), exceeded time (orange/red), category colors
 - **Interactive charts** - Chart.js with tooltips and legend
 - **Dark mode** - toggle between light and dark themes
 - **Hot reload** - instant changes during development
@@ -77,13 +88,14 @@ Jirafly automatically fetches tasks from the KNJ project for all teams, categori
 ### URL Parameters
 
 ```
-http://localhost:3000/                        # All teams, 6 sprints
-http://localhost:3000/?team=serenity          # Serenity only
-http://localhost:3000/?sprints=10             # 10 sprints
-http://localhost:3000/?team=falcon&sprints=4
+http://localhost:3000/                        # History - All teams, 6 sprints
+http://localhost:3000/?team=serenity          # History - Serenity only
+http://localhost:3000/?sprints=10             # History - 10 sprints
+http://localhost:3000/?team=falcon&sprints=4  # History - Falcon, 4 sprints
+http://localhost:3000/sprint-check            # Sprint Check - unassigned tasks
 ```
 
-**Parameters**:
+**Parameters** (History page only):
 - `team` - filter by team (serenity, falcon, discovery, kosmik)
 - `sprints` - number of sprints (default: 6)
 
@@ -100,7 +112,9 @@ The application sorts tasks into 4 categories (in priority order):
 
 **Note**: Excluded tasks are not counted in percentage chart (100% = Maintenance + Bug + Product).
 
-## Task Table
+## Task Tables
+
+### History Table
 
 The table displays:
 - **Sprint** - sprint number (grouped, separated by gray line)
@@ -111,10 +125,25 @@ The table displays:
 - **Fix Version** - version (red if doesn't match sprint)
 - **Status** - task status (green Done/Merged, yellow In Review)
 
+### Sprint Check Table
+
+The table displays:
+- **Sprint** - sprint number (shown on first row only)
+- **WSJF** - Weighted Shortest Job First priority
+- **Task** - type badge, key and title (colored by category)
+- **HLE** - High Level Estimate (red 0 = missing estimate)
+- **Due Date** - deadline badge (red=overdue, orange=within 7 days)
+- **Status** - task status
+
 **Type badge colors**:
 - Bug - red badge
+- Epic - purple badge
 - Analysis - dark gray badge
 - Other - light gray badge
+
+**Title colors** (both tables):
+- Maintenance tasks - blue text
+- Excluded tasks - magenta text
 
 ## Docker
 
@@ -136,13 +165,24 @@ docker-compose logs -f
 ## API Endpoints
 
 ### `GET /`
-Returns HTML page with UI
+Returns HTML page with History view
+
+### `GET /sprint-check`
+Returns HTML page with Sprint Check view
 
 ### `GET /api/data`
-Fetches and processes tasks for all teams
+Fetches and processes tasks for all teams (History page)
 
 **Parameters**:
 - `sprints` (number, optional) - number of sprints (default: 6)
+
+### `GET /api/unassigned`
+Fetches tasks from next sprint without team assignment (Sprint Check page)
+
+**Response**:
+- `issues` - array of tasks with WSJF, HLE, due date
+- `nextVersion` - next sprint version (e.g., "6.20")
+- `totalIssues` - total count
 
 ### `GET /health`
 Health check endpoint

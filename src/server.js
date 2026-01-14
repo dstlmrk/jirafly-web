@@ -45,8 +45,13 @@ app.use((req, res, next) => {
   return basicAuth(req, res, next);
 });
 
-// Serve HTML page
+// Serve HTML page (both routes serve the same SPA)
 app.get('/', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(generateHTML({ jiraUrl: process.env.JIRA_URL }));
+});
+
+app.get('/sprint-check', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(generateHTML({ jiraUrl: process.env.JIRA_URL }));
 });
@@ -100,6 +105,30 @@ app.get('/api/data', async (req, res) => {
       teamData,
       sprintCount,
       currentVersion
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+    res.status(500).json({
+      error: error.message || 'Internal server error'
+    });
+  }
+});
+
+// API endpoint for unassigned issues (next sprint, no team)
+app.get('/api/unassigned', async (req, res) => {
+  try {
+    console.log(`[API] Request: Unassigned issues`);
+    const result = await jiraClient.fetchUnassignedIssues();
+
+    // Process data for table display
+    const tableData = dataProcessor.prepareUnassignedTableData(result.issues);
+
+    console.log(`[API] Fetched ${result.issues.length} unassigned issues`);
+
+    res.json({
+      issues: tableData,
+      nextVersion: result.nextVersion,
+      totalIssues: result.issues.length
     });
   } catch (error) {
     console.error('[API] Error:', error);

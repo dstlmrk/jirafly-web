@@ -240,9 +240,25 @@ function getTypeAbbreviation(issueType) {
     'Task': 'T',
     'Story': 'S',
     'Analysis': 'A',
-    'Tech Debt': 'T'
+    'Tech Debt': 'T',
+    'Epic': 'E',
+    'Sub-task': 'ST'
   };
   return typeMap[issueType] || issueType.charAt(0).toUpperCase();
+}
+
+/**
+ * Format date to compact format (d.m.yyyy)
+ * @param {string} dateString - ISO date string
+ * @returns {string} Formatted date without spaces
+ */
+function formatDueDate(dateString) {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  const day = date.getDate();
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
 }
 
 /**
@@ -330,6 +346,73 @@ function prepareTableData(issues, groupBy) {
 }
 
 /**
+ * Prepare table data for unassigned issues page
+ * Different columns: WSJF instead of assignee, due date instead of tracked time/fix version
+ * @param {Array} issues - Array of Jira issue objects
+ * @returns {Array} Array of issue data for unassigned table display
+ */
+function prepareUnassignedTableData(issues) {
+  const tableData = [];
+
+  for (const issue of issues) {
+    const fields = issue.fields;
+
+    // Get sprint version
+    const sprint = extractGroupKey(issue, GROUP_BY_OPTIONS.SPRINT);
+
+    // Get WSJF value
+    const wsjf = fields[CUSTOM_FIELDS.WSJF] || 0;
+
+    // Get type abbreviation and issue type
+    const issueType = fields.issuetype.name;
+    const typeAbbr = getTypeAbbreviation(issueType);
+
+    // Get category for coloring
+    const category = categorizeIssue(issue);
+
+    // Truncate summary to 80 chars
+    let summary = fields.summary || '';
+    if (summary.length > 80) {
+      summary = summary.substring(0, 77) + '...';
+    }
+
+    // Get HLE
+    const hle = parseHLE(fields[CUSTOM_FIELDS.HLE], issue.key);
+
+    // Get due date
+    const dueDateRaw = fields.duedate || null;
+    const dueDate = formatDueDate(dueDateRaw);
+
+    // Get status
+    const status = fields.status?.name || 'Unknown';
+
+    tableData.push({
+      sprint,
+      wsjf,
+      typeAbbr,
+      issueType,
+      key: issue.key,
+      summary,
+      hle: hle || 0,
+      dueDate,
+      dueDateRaw,
+      status,
+      category
+    });
+  }
+
+  // Sort by WSJF descending (highest priority first), then by key
+  tableData.sort((a, b) => {
+    if (a.wsjf !== b.wsjf) {
+      return b.wsjf - a.wsjf; // Descending
+    }
+    return a.key.localeCompare(b.key);
+  });
+
+  return tableData;
+}
+
+/**
  * Process all issues and aggregate by group and category
  * @param {Array} issues - Array of Jira issue objects
  * @param {string} groupBy - 'fix_version' or 'sprint'
@@ -360,12 +443,14 @@ module.exports = {
   // Main functions
   processIssues,
   prepareTableData,
+  prepareUnassignedTableData,
 
   // Helper functions (exported for testing)
   extractVersionNumber,
   extractGroupKey,
   categorizeIssue,
   formatTimeSpent,
+  formatDueDate,
 
   // Constants (exported for reference)
   CATEGORIES,

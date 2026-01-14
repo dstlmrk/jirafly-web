@@ -471,6 +471,98 @@ const CSS_STYLES = `
   .issues-table .empty-cell {
     color: var(--text-secondary);
   }
+
+  /* Navigation tabs */
+  .nav-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border-bottom: 2px solid var(--border-color);
+  }
+
+  .nav-tab {
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    padding: 12px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: color 0.2s, border-color 0.2s;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+  }
+
+  .nav-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .nav-tab.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  /* Unassigned page specific styles */
+  .issues-table .col-wsjf {
+    width: 60px;
+    text-align: right;
+  }
+
+  .issues-table .col-due {
+    width: 100px;
+    white-space: nowrap;
+  }
+
+  .issues-table .due-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: #e5e7eb;
+    color: #374151;
+  }
+
+  body.dark .issues-table .due-badge {
+    background: #374151;
+    color: #d1d5db;
+  }
+
+  .issues-table .due-overdue {
+    background: #fee2e2;
+    color: #dc2626;
+    font-weight: 700;
+  }
+
+  body.dark .issues-table .due-overdue {
+    background: #7f1d1d;
+    color: #fca5a5;
+  }
+
+  .issues-table .due-soon {
+    background: #fef3c7;
+    color: #d97706;
+    font-weight: 700;
+  }
+
+  body.dark .issues-table .due-soon {
+    background: #78350f;
+    color: #fcd34d;
+  }
+
+  .issues-table .task-type-epic {
+    background: #7c3aed;
+    color: #fff;
+  }
+
+  body.dark .issues-table .task-type-epic {
+    background: #8b5cf6;
+    color: #fff;
+  }
 `;
 
 function generateHTML(options) {
@@ -493,7 +585,7 @@ function generateHTML(options) {
     <div class="header">
       <div class="header-left">
         <h1>Jirafly Web 🪰</h1>
-        <p class="subtitle">Sprint Composition Overview</p>
+        <p class="subtitle">Making Jira slightly less painful</p>
       </div>
       <div class="header-buttons">
         <button id="teamToggle" class="group-toggle" disabled>All teams</button>
@@ -519,6 +611,11 @@ function generateHTML(options) {
           </svg>
         </a>
       </div>
+    </div>
+
+    <div class="nav-tabs">
+      <button id="tabHistory" class="nav-tab active" data-page="history">History</button>
+      <button id="tabSprintCheck" class="nav-tab" data-page="sprint-check">Sprint check</button>
     </div>
 
     <div id="status">Initializing...</div>
@@ -553,6 +650,24 @@ function generateHTML(options) {
         </tbody>
       </table>
     </div>
+
+    <div class="table-wrapper" id="unassignedTableWrapper" style="display: none;">
+      <div class="table-title" id="unassignedTableTitle">Tasks Without Team</div>
+      <table class="issues-table" id="unassignedTable">
+        <thead>
+          <tr>
+            <th class="col-sprint">Sprint</th>
+            <th class="col-wsjf">WSJF</th>
+            <th class="col-task">Task</th>
+            <th class="col-hle">HLE</th>
+            <th class="col-due">Due Date</th>
+            <th class="col-status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="unassignedTableBody">
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <script>
@@ -562,9 +677,207 @@ function generateHTML(options) {
     let rawIssues = []; // Store raw issues
     let currentTeam = 'All'; // Current selected team
     let availableTeams = ['All']; // Available teams
+    let currentPage = 'history'; // Current page: 'history' or 'unassigned'
+    let unassignedData = null; // Cache for unassigned data
 
     const COLORS = ${JSON.stringify(CHART_COLORS)};
     const JIRA_BROWSE_URL = '${jiraBrowseUrl}';
+
+    // Page navigation functions
+    function getPageFromURL() {
+      const path = window.location.pathname;
+      if (path === '/sprint-check') {
+        return 'sprint-check';
+      }
+      return 'history';
+    }
+
+    function switchPage(page) {
+      currentPage = page;
+
+      // Update URL using path
+      const newPath = page === 'history' ? '/' : '/' + page;
+      window.history.pushState({}, '', newPath);
+
+      // Update tabs
+      document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.page === page);
+      });
+
+      // Update team button - disabled on sprint-check page, always shows "All teams"
+      const teamButton = document.getElementById('teamToggle');
+      if (page === 'sprint-check') {
+        teamButton.disabled = true;
+        teamButton.textContent = 'All teams';
+      } else {
+        teamButton.disabled = !allData;
+        updateTeamButton(currentTeam);
+      }
+
+      // Show/hide content based on page
+      updatePageContent();
+    }
+
+    function updatePageContent() {
+      const chartsContainer = document.getElementById('chartsContainer');
+      const tableWrapper = document.getElementById('tableWrapper');
+      const sprintCheckTableWrapper = document.getElementById('unassignedTableWrapper');
+      const statusEl = document.getElementById('status');
+
+      if (currentPage === 'history') {
+        // Hide sprint-check content
+        sprintCheckTableWrapper.style.display = 'none';
+
+        // Load history data if not cached
+        if (!allData) {
+          loadData();
+        } else {
+          // Show cached data and update status
+          chartsContainer.style.display = 'grid';
+          tableWrapper.style.display = 'block';
+          const sprintInfo = allData.sprintCount ? \` from \${allData.sprintCount} sprints\` : '';
+          const currentInfo = allData.currentVersion ? \` (current sprint \${allData.currentVersion})\` : '';
+          statusEl.textContent = \`Loaded \${allData.all.totalIssues} tasks\${sprintInfo}\${currentInfo}\`;
+        }
+      } else {
+        // Hide history content
+        chartsContainer.style.display = 'none';
+        tableWrapper.style.display = 'none';
+
+        // Load sprint-check data if not cached
+        if (!unassignedData) {
+          loadUnassignedData();
+        } else {
+          // Show cached data and update status
+          sprintCheckTableWrapper.style.display = 'block';
+          statusEl.textContent = \`Loaded \${unassignedData.totalIssues} tasks without team for sprint \${unassignedData.nextVersion}\`;
+        }
+      }
+    }
+
+    async function loadUnassignedData() {
+      const statusEl = document.getElementById('status');
+      statusEl.className = 'loading';
+      statusEl.innerHTML = '<span class="spinner"></span>Loading tasks for sprint check...';
+
+      try {
+        const response = await fetch('/api/unassigned');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to load data');
+        }
+
+        unassignedData = await response.json();
+        statusEl.className = '';
+        statusEl.textContent = \`Loaded \${unassignedData.totalIssues} tasks without team for sprint \${unassignedData.nextVersion}\`;
+
+        renderUnassignedTable(unassignedData.issues);
+        document.getElementById('unassignedTableWrapper').style.display = 'block';
+      } catch (error) {
+        statusEl.className = 'error';
+        statusEl.textContent = \`Error: \${error.message}\`;
+      }
+    }
+
+    function renderUnassignedTable(tableData) {
+      const tbody = document.getElementById('unassignedTableBody');
+      tbody.innerHTML = '';
+
+      document.getElementById('unassignedTableTitle').textContent =
+        \`Tasks Without Team (\${tableData.length})\`;
+
+      let prevSprint = null;
+      tableData.forEach(row => {
+        const tr = document.createElement('tr');
+
+        // Highlight rows with 0 HLE
+        if (!row.hle || row.hle === 0) {
+          tr.classList.add('row-hle-zero');
+        }
+
+        // Sprint column - only show on first occurrence
+        const sprintTd = document.createElement('td');
+        sprintTd.className = 'col-sprint';
+        if (row.sprint !== prevSprint) {
+          sprintTd.innerHTML = \`<span class="sprint-badge">\${row.sprint}</span>\`;
+          prevSprint = row.sprint;
+        }
+        tr.appendChild(sprintTd);
+
+        // WSJF column
+        const wsjfTd = document.createElement('td');
+        wsjfTd.className = 'col-wsjf';
+        wsjfTd.textContent = row.wsjf ? row.wsjf.toFixed(1) : '-';
+        tr.appendChild(wsjfTd);
+
+        // Task column
+        const taskTd = document.createElement('td');
+        taskTd.className = 'col-task';
+        const jiraUrl = \`\${JIRA_BROWSE_URL}\${row.key}\`;
+        let typeClass = 'task-type';
+        if (row.issueType === 'Bug') typeClass += ' task-type-bug';
+        else if (row.issueType === 'Epic') typeClass += ' task-type-epic';
+        else if (row.issueType === 'Analysis') typeClass += ' task-type-analysis';
+
+        // Summary class based on category
+        let summaryClass = 'task-summary';
+        if (row.category === 'Maintenance') summaryClass += ' task-summary-maintenance';
+        else if (row.category === 'Excluded') summaryClass += ' task-summary-excluded';
+
+        taskTd.innerHTML = \`
+          <span class="\${typeClass}">\${row.typeAbbr}</span>
+          <a href="\${jiraUrl}" target="_blank" class="task-key">\${row.key}</a>:
+          <span class="\${summaryClass}">\${row.summary}</span>
+        \`;
+        tr.appendChild(taskTd);
+
+        // HLE column
+        const hleTd = document.createElement('td');
+        hleTd.className = 'col-hle';
+        if (!row.hle || row.hle === 0) {
+          hleTd.innerHTML = '<span class="hle-zero">0</span>';
+        } else {
+          hleTd.textContent = row.hle.toFixed(2);
+        }
+        tr.appendChild(hleTd);
+
+        // Due Date column
+        const dueTd = document.createElement('td');
+        dueTd.className = 'col-due';
+        if (row.dueDateRaw) {
+          const dueDate = new Date(row.dueDateRaw);
+          const now = new Date();
+          const diffDays = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+
+          let dueBadgeClass = 'due-badge';
+          if (diffDays < 0) {
+            dueBadgeClass += ' due-overdue';
+          } else if (diffDays <= 7) {
+            dueBadgeClass += ' due-soon';
+          }
+          dueTd.innerHTML = \`<span class="\${dueBadgeClass}">\${row.dueDate}</span>\`;
+        } else {
+          dueTd.innerHTML = '<span class="empty-cell">-</span>';
+        }
+        tr.appendChild(dueTd);
+
+        // Status column
+        const statusTd = document.createElement('td');
+        statusTd.className = 'col-status';
+        const doneStatuses = ['Done', 'In Testing', 'Merged'];
+        const reviewStatuses = ['In Review'];
+        let statusClass = 'status-label';
+        if (doneStatuses.includes(row.status)) {
+          statusClass += ' status-done';
+        } else if (reviewStatuses.includes(row.status)) {
+          statusClass += ' status-review';
+        }
+        statusTd.innerHTML = \`<span class="\${statusClass}">\${row.status}</span>\`;
+        tr.appendChild(statusTd);
+
+        tbody.appendChild(tr);
+      });
+    }
 
     // Theme toggle functionality
     function initTheme() {
@@ -1123,8 +1436,32 @@ function generateHTML(options) {
 
     // Auto-load data when page loads
     window.addEventListener('DOMContentLoaded', () => {
-      loadData();
+      // Initialize page from URL
+      currentPage = getPageFromURL();
+
+      // Set up tab listeners
+      document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', () => switchPage(tab.dataset.page));
+      });
+
+      // Update active tab
+      document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.page === currentPage);
+      });
+
+      // Set up team toggle listener
       document.getElementById('teamToggle').addEventListener('click', toggleTeam);
+
+      // Load appropriate data based on current page
+      if (currentPage === 'history') {
+        loadData();
+      } else {
+        loadUnassignedData();
+        // Disable team toggle on sprint-check page, show "All teams"
+        const teamButton = document.getElementById('teamToggle');
+        teamButton.disabled = true;
+        teamButton.textContent = 'All teams';
+      }
     });
   </script>
 </body>

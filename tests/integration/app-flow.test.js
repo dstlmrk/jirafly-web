@@ -314,10 +314,6 @@ async function runTests() {
     assertTrue(html.includes('chart.js'), 'Should include Chart.js');
   });
 
-  test('Contains correct subtitle', () => {
-    assertTrue(html.includes('Sprint Composition Overview'), 'Should have correct subtitle');
-  });
-
   test('Contains team toggle button', () => {
     assertTrue(html.includes('teamToggle'), 'Should have team toggle');
   });

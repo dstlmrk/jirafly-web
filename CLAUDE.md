@@ -44,16 +44,24 @@ docker-compose logs -f       # View logs
 ## Architecture Overview
 
 ### Data Flow
+
+**History page** (`/`):
 1. **Frontend** (browser) → sends optional team + sprints to `/api/data`
 2. **Server** (`src/server.js`) → validates params, calls JiraClient
 3. **JiraClient** (`src/jira-client.js`) → fetches issues from Jira:
    - Fetches all teams (Serenity, Falcon, Discovery, Kosmik)
    - Optimized pagination (2 pages for 6 sprints, stops early when enough found)
-   - Filters to current sprint + 1 future + N historical
+   - Filters to current sprint + N historical (no future sprints)
 4. **DataProcessor** (`src/data-processor.js`) → categorizes and aggregates issues
 5. **Server** → returns processed JSON to frontend (all teams + per-team data)
 6. **Frontend** → renders two Chart.js charts + detailed task table
 7. **Frontend** → team toggle button to filter display
+
+**Sprint Check page** (`/sprint-check`):
+1. **Frontend** → calls `/api/unassigned`
+2. **JiraClient** → fetches issues from next sprint without team labels (includes Epics)
+3. **DataProcessor** → prepares table data with WSJF, due date
+4. **Frontend** → renders table with unassigned tasks
 
 ### Core Modules
 
@@ -62,9 +70,10 @@ docker-compose logs -f       # View logs
 - Supports both scoped tokens (with `JIRA_CLOUD_ID`) and unscoped tokens
 - Token-based pagination (`/rest/api/3/search/jql` with `nextPageToken`)
 - Retry logic with exponential backoff for rate limits and 5xx errors
-- Always excludes Epic and Sub-task issue types via JQL
+- **History**: Excludes Epic and Sub-task issue types, no future sprints
+- **Sprint Check**: Includes Epics, fetches from next sprint only
 - **Sprint detection**: Parses end dates from sprint names, determines current sprint
-- **Max future sprint**: Only includes current + 1 future sprint (configurable)
+- **Sprint caching**: Caches sprint data to avoid refetching between pages
 - **Optimized fetching**: Only fetches required fields (not `*all`), minimal pagination
 
 **`src/data-processor.js`** - Issue categorization and aggregation
@@ -75,7 +84,8 @@ docker-compose logs -f       # View logs
   4. `Product` - everything else (default)
 - **Grouping**: By sprint using `customfield_10000` array, extracts X.Y version
 - **Aggregation**: counts issues per category + sums HLE values (`customfield_11605`)
-- **Table data**: Prepares detailed task list with HLE, tracked time, status
+- **Table data**: `prepareTableData()` for History, `prepareUnassignedTableData()` for Sprint Check
+- **Date formatting**: `formatDueDate()` returns compact format (d.m.yyyy)
 
 **`src/config.js`** - Centralized configuration
 - All magic numbers, custom field IDs, category definitions, chart colors
@@ -84,30 +94,39 @@ docker-compose logs -f       # View logs
 - Custom field IDs:
   - `customfield_10000` - Sprint
   - `customfield_11605` - HLE (High Level Estimate)
+  - `customfield_11737` - WSJF (Weighted Shortest Job First)
 
 **`src/html-template.js`** - Frontend generation
 - Single-page app embedded in server response
-- Two stacked bar charts using Chart.js (both include Average column):
-  1. Percentage distribution by HLE (excludes Excluded category from 100%, Y-axis 0-100%)
-  2. Absolute HLE values (shows effort distribution, includes all categories)
-- Detailed task table with:
-  - Sprint grouping (first occurrence only shown)
-  - Assignee grouping within sprint
-  - Color coding: red HLE=0, orange/red tracked time warnings
-  - Fix version mismatch highlighting
-  - Status badges (Done=green, In Review=yellow)
-- Team toggle button (updates URL for sharing)
+- **Tab navigation**: History and Sprint Check pages
+- **Data caching**: Caches API responses, no refetch on tab switch
+- **History page**:
+  - Two stacked bar charts using Chart.js (both include Average column)
+  - Percentage distribution by HLE (excludes Excluded category from 100%)
+  - Absolute HLE values (shows effort distribution)
+  - Detailed task table with sprint/assignee grouping
+  - Team toggle button (updates URL for sharing)
+- **Sprint Check page**:
+  - Table with unassigned tasks from next sprint
+  - Columns: Sprint, WSJF, Task, HLE, Due Date, Status
+  - Due date badges with color coding
+  - Category-based title coloring
 - Dark mode toggle
 - JetBrains Mono font throughout
 
 ### URL Parameters
 
-**Frontend parameters** (passed to browser):
+**Routes**:
+- `/` - History page (task distribution analysis)
+- `/sprint-check` - Sprint Check page (unassigned tasks)
+
+**Frontend parameters** (History page only):
 - `team` - Filter by team (serenity, falcon, discovery, kosmik) - short names accepted
 - `sprints` - Number of sprints to display (default: 6)
 
-**API parameters** (`/api/data`):
-- `sprints` - Override default sprint count (default: 6)
+**API parameters**:
+- `/api/data?sprints=N` - Override default sprint count (default: 6)
+- `/api/unassigned` - No parameters, returns next sprint unassigned tasks
 
 ### Authentication Architecture
 
@@ -174,8 +193,14 @@ Issues are sorted by: sprint (descending) → assignee → key
 
 ### Task Type Badges
 - **Bug**: Red badge with white text
+- **Epic**: Purple badge with white text
 - **Analysis**: Dark gray badge with white text
 - **Other types**: Light gray badge with black text
+
+### Due Date Badges (Sprint Check)
+- **Normal**: Gray badge
+- **Within 7 days**: Orange/yellow badge
+- **Overdue**: Red badge
 
 ## Environment Variables
 
@@ -200,8 +225,12 @@ AUTH_PASSWORD=secret         # optional, enables basic auth
 
 **Optimized pagination**: Default 2 pages (200 issues) for 6 sprints. Stops early when enough sprints found. Scales up for larger sprint requests.
 
-**Max future sprint**: Only current + 1 future sprint included to avoid showing sprints too far ahead.
+**History page sprints**: Only current + past sprints shown (no future sprints).
+
+**Sprint Check page**: Shows tasks from next sprint only, without team labels.
 
 **HLE null handling**: Issues with null/undefined HLE values are treated as HLE=0 to prevent NaN aggregation bugs.
 
 **Current sprint display**: Status bar shows current sprint version detected from sprint end dates.
+
+**Data caching**: Frontend caches API responses - switching tabs doesn't refetch data, only page refresh does.

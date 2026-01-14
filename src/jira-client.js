@@ -727,7 +727,7 @@ class JiraClient {
     console.log(`[Jira] Found ${sprintIds.length} sprint(s) for version ${nextVersion.full}: ${nextVersionSprints.map(s => s.name).join(', ')}`);
 
     // Fetch ALL issues in next sprint (no team filter - filtering done on frontend)
-    const nextSprintJql = `project IN ("BE Skip Pay", Spitzel) AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_DONE_STATES} ORDER BY cf[11737] DESC, created DESC`;
+    const nextSprintJql = `project = "BE Skip Pay" AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_DONE_STATES} ORDER BY cf[11737] DESC, created DESC`;
 
     console.log(`[Jira] Fetching next sprint issues`);
     console.log(`[Jira] JQL: ${nextSprintJql}`);

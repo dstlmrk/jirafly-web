@@ -782,6 +782,16 @@ function generateHTML(options) {
         tab.classList.toggle('active', tab.dataset.page === page);
       });
 
+      // Sync team selection from sessionStorage
+      const savedTeam = sessionStorage.getItem('jirafly-selected-team');
+      if (savedTeam) {
+        if (page === 'next-sprint' && availableNextSprintTeams.includes(savedTeam)) {
+          currentNextSprintTeam = savedTeam;
+        } else if (page === 'history' && availableTeams.includes(savedTeam)) {
+          currentTeam = savedTeam;
+        }
+      }
+
       // Update team button based on page
       const teamButton = document.getElementById('teamToggle');
       if (page === 'next-sprint') {
@@ -814,12 +824,10 @@ function generateHTML(options) {
         if (!allData) {
           loadData();
         } else {
-          // Show cached data and render if needed
+          // Show cached data - always re-render with current team (may have changed)
           const teamData = getDataForTeam(currentTeam);
-          if (!percentageChart || !hleChart) {
-            renderCharts(teamData);
-            renderTable(teamData.tableData);
-          }
+          renderCharts(teamData);
+          renderTable(teamData.tableData);
           chartsContainer.style.display = 'grid';
           tableWrapper.style.display = 'block';
           const sprintInfo = allData.sprintCount ? \` from \${allData.sprintCount} sprints\` : '';
@@ -831,10 +839,8 @@ function generateHTML(options) {
         if (!nextSprintData) {
           loadNextSprintData();
         } else {
-          // Show cached data and render if needed
-          if (!nextSprintPercentageChart || !nextSprintHleChart) {
-            renderNextSprintCharts();
-          }
+          // Show cached data - always re-render with current team (may have changed)
+          renderNextSprintCharts();
           const filteredData = getNextSprintDataForTeam(currentNextSprintTeam);
           renderNextSprintTable(filteredData);
           nextSprintChartsContainer.style.display = 'grid';
@@ -866,6 +872,13 @@ function generateHTML(options) {
         // Set available teams for next sprint (NoTeam + actual teams)
         if (nextSprintData.teams && nextSprintData.teams.length > 0) {
           availableNextSprintTeams = ['NoTeam', ...nextSprintData.teams];
+        }
+
+        // Apply saved team from sessionStorage if available
+        const savedTeam = sessionStorage.getItem('jirafly-selected-team');
+        if (savedTeam && availableNextSprintTeams.includes(savedTeam)) {
+          currentNextSprintTeam = savedTeam;
+          updateNextSprintTeamButton(currentNextSprintTeam);
         }
 
         statusEl.className = '';
@@ -915,6 +928,13 @@ function generateHTML(options) {
       const currentIndex = availableNextSprintTeams.indexOf(currentNextSprintTeam);
       const nextIndex = (currentIndex + 1) % availableNextSprintTeams.length;
       currentNextSprintTeam = availableNextSprintTeams[nextIndex];
+
+      // Save specific team to sessionStorage for cross-page sync
+      if (currentNextSprintTeam !== 'NoTeam') {
+        sessionStorage.setItem('jirafly-selected-team', currentNextSprintTeam);
+      } else {
+        sessionStorage.removeItem('jirafly-selected-team');
+      }
 
       updateNextSprintTeamButton(currentNextSprintTeam);
 
@@ -1289,6 +1309,13 @@ function generateHTML(options) {
       const nextIndex = (currentIndex + 1) % availableTeams.length;
       currentTeam = availableTeams[nextIndex];
 
+      // Save specific team to sessionStorage for cross-page sync
+      if (currentTeam !== 'All') {
+        sessionStorage.setItem('jirafly-selected-team', currentTeam);
+      } else {
+        sessionStorage.removeItem('jirafly-selected-team');
+      }
+
       // Update URL with team parameter (use short name)
       const params = new URLSearchParams(window.location.search);
       if (currentTeam === 'All') {
@@ -1361,11 +1388,18 @@ function generateHTML(options) {
           availableTeams = ['All', ...data.teams];
         }
 
-        // Set current team from URL (validate it exists)
+        // Set current team: URL param > sessionStorage > default 'All'
         if (team && availableTeams.includes(team)) {
           currentTeam = team;
+          // Also save to sessionStorage for cross-page sync
+          sessionStorage.setItem('jirafly-selected-team', team);
         } else {
-          currentTeam = 'All';
+          const savedTeam = sessionStorage.getItem('jirafly-selected-team');
+          if (savedTeam && availableTeams.includes(savedTeam)) {
+            currentTeam = savedTeam;
+          } else {
+            currentTeam = 'All';
+          }
         }
         updateTeamButton(currentTeam);
 

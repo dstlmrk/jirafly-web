@@ -350,9 +350,10 @@ class JiraClient {
    * Current sprint = the one where today is between start and end date
    * @param {Map} versionMap - Map of version string to array of sprints
    * @param {Array} sortedVersions - Array of version strings sorted ascending
+   * @param {number} extendDays - Number of days to extend sprint end date (for next-sprint page)
    * @returns {string|null} Current version string or null
    */
-  determineCurrentVersion(versionMap, sortedVersions) {
+  determineCurrentVersion(versionMap, sortedVersions, extendDays = 0) {
     const now = new Date();
     // Set to start of day for consistent comparison
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -363,8 +364,15 @@ class JiraClient {
       for (const sprint of sprints) {
         const dates = this.parseSprintDates(sprint.name);
         if (dates) {
-          const isCurrentSprint = today >= dates.startDate && today <= dates.endDate;
-          console.log(`[Jira] Sprint ${sprint.name} -> ${dates.startDate.toISOString().split('T')[0]} to ${dates.endDate.toISOString().split('T')[0]}${isCurrentSprint ? ' ← CURRENT' : ''}`);
+          // Optionally extend end date (for next-sprint page: first N days of new sprint still show previous)
+          const adjustedEnd = new Date(dates.endDate);
+          if (extendDays > 0) {
+            adjustedEnd.setDate(adjustedEnd.getDate() + extendDays);
+          }
+
+          const isCurrentSprint = today >= dates.startDate && today <= adjustedEnd;
+          const logSuffix = extendDays > 0 ? ` (current until ${adjustedEnd.toISOString().split('T')[0]})` : '';
+          console.log(`[Jira] Sprint ${sprint.name} -> ${dates.startDate.toISOString().split('T')[0]} to ${dates.endDate.toISOString().split('T')[0]}${logSuffix}${isCurrentSprint ? ' ← CURRENT' : ''}`);
 
           if (isCurrentSprint) {
             console.log(`[Jira] Determined current version: ${version}`);
@@ -588,8 +596,8 @@ class JiraClient {
       versionMap, sortedVersions, sprintCountToUse, true
     );
 
-    // Cache sprint info for reuse by other endpoints (e.g., sprint-check)
-    this.sprintCache = { versionMap, currentVersion };
+    // Cache sprint info for reuse by other endpoints (e.g., next-sprint)
+    this.sprintCache = { versionMap, sortedVersions };
 
     // Step 6: Fetch ONLY issues from selected sprints for all teams
     const fullJql = `project = "${TEAM_SERENITY.project}" AND (${teamLabels}) AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_TYPES_AND_CLOSED}`;
@@ -666,14 +674,13 @@ class JiraClient {
     const client = this.getAxiosInstance();
     const allTeams = Object.values(TEAMS);
 
-    let currentVersion, nextVersion, versionMap;
+    let currentVersion, nextVersion, versionMap, sortedVersions;
 
-    if (this.sprintCache && this.sprintCache.currentVersion && this.sprintCache.versionMap) {
+    if (this.sprintCache && this.sprintCache.versionMap) {
       // Use cached sprint info from previous fetchAllTeamsIssues call
       console.log(`[Jira] Using cached sprint info`);
-      currentVersion = this.sprintCache.currentVersion;
       versionMap = this.sprintCache.versionMap;
-      nextVersion = this.getNextVersion(currentVersion);
+      sortedVersions = this.sprintCache.sortedVersions;
     } else {
       // Step 1: Do sprint analysis to determine current version
       const teamLabels = allTeams.map(t => `labels = "${t.label}"`).join(' OR ');
@@ -692,12 +699,12 @@ class JiraClient {
       const sprintMap = this.extractSprintsFromIssues(analysisIssues);
       const groupResult = this.groupSprintsByVersion(sprintMap);
       versionMap = groupResult.versionMap;
-      const sortedVersions = groupResult.sortedVersions;
-
-      // Determine current version and calculate next
-      currentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
-      nextVersion = this.getNextVersion(currentVersion);
+      sortedVersions = groupResult.sortedVersions;
     }
+
+    // Determine current version with 2-day extension (first 2 days of new sprint still show previous)
+    currentVersion = this.determineCurrentVersion(versionMap, sortedVersions, 2);
+    nextVersion = this.getNextVersion(currentVersion);
 
     console.log(`[Jira] Current version: ${currentVersion}, next version: ${nextVersion.full}`);
 

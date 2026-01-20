@@ -298,101 +298,90 @@ class JiraClient {
   }
 
   /**
-   * Parse end date from sprint name (e.g., "29. 9" from "6.20.0 (16. 9. - 29. 9)")
+   * Parse start and end dates from sprint name (e.g., "6.20.0 (20. 1. - 2. 2.)")
+   * @param {string} sprintName - Sprint name
+   * @returns {Object|null} { startDate, endDate } or null if not found
+   */
+  parseSprintDates(sprintName) {
+    // Match pattern like "(20. 1. - 2. 2.)" - captures both start and end dates
+    const dateMatch = sprintName.match(/\((\d+)\.\s*(\d+)\.\s*-\s*(\d+)\.\s*(\d+)\.?\s*\)/);
+    if (!dateMatch) return null;
+
+    const startDay = parseInt(dateMatch[1]);
+    const startMonth = parseInt(dateMatch[2]) - 1; // JS months are 0-indexed
+    const endDay = parseInt(dateMatch[3]);
+    const endMonth = parseInt(dateMatch[4]) - 1;
+
+    const now = new Date();
+    let year = now.getFullYear();
+
+    // Create dates - handle year wrap-around for sprints crossing year boundary
+    let startDate = new Date(year, startMonth, startDay);
+    let endDate = new Date(year, endMonth, endDay);
+
+    // If end is before start, end date is in next year (e.g., Dec-Jan sprint)
+    if (endDate < startDate) {
+      endDate = new Date(year + 1, endMonth, endDay);
+    }
+
+    // If both dates are more than 6 months in the future, shift to previous year
+    const sixMonthsFromNow = new Date(now);
+    sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+    if (startDate > sixMonthsFromNow) {
+      startDate = new Date(year - 1, startMonth, startDay);
+      endDate = new Date(endDate < startDate ? year : year - 1, endMonth, endDay);
+    }
+
+    return { startDate, endDate };
+  }
+
+  /**
+   * Parse end date from sprint name (legacy method for compatibility)
    * @param {string} sprintName - Sprint name
    * @returns {Date|null} End date or null if not found
    */
   parseSprintEndDate(sprintName) {
-    // Match pattern like "(16. 9. - 29. 9)" or "(6. 1. - 19. 1.)" - note spaces in dates
-    const dateMatch = sprintName.match(/\([\d.\s]+\s*-\s*(\d+)\.\s*(\d+)\.?\s*\)/);
-    if (dateMatch) {
-      const day = parseInt(dateMatch[1]);
-      const month = parseInt(dateMatch[2]) - 1; // JS months are 0-indexed
-      const now = new Date();
-      let year = now.getFullYear();
-      let endDate = new Date(year, month, day);
-
-      // If the date is more than 6 months in the future, it's likely from last year
-      const sixMonthsFromNow = new Date(now);
-      sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
-      if (endDate > sixMonthsFromNow) {
-        year--;
-        endDate = new Date(year, month, day);
-      }
-
-      return endDate;
-    }
-    return null;
+    const dates = this.parseSprintDates(sprintName);
+    return dates ? dates.endDate : null;
   }
 
   /**
-   * Determine current version based on sprint end dates
-   * Current sprint = the one where end date is closest to today (within reasonable range)
+   * Determine current version based on sprint dates
+   * Current sprint = the one where today is between start and end date
    * @param {Map} versionMap - Map of version string to array of sprints
    * @param {Array} sortedVersions - Array of version strings sorted ascending
    * @returns {string|null} Current version string or null
    */
   determineCurrentVersion(versionMap, sortedVersions) {
     const now = new Date();
-    let currentVersion = null;
-    let bestDiff = Infinity;
+    // Set to start of day for consistent comparison
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Debug: log all sprint dates
+    // Debug: log all sprint dates and find current
     for (const version of sortedVersions) {
       const sprints = versionMap.get(version);
       for (const sprint of sprints) {
-        const endDate = this.parseSprintEndDate(sprint.name);
-        if (endDate) {
-          const diffDays = Math.round((endDate - now) / (1000 * 60 * 60 * 24));
-          console.log(`[Jira] Sprint ${sprint.name} -> end date: ${endDate.toISOString().split('T')[0]}, diff: ${diffDays} days`);
+        const dates = this.parseSprintDates(sprint.name);
+        if (dates) {
+          const isCurrentSprint = today >= dates.startDate && today <= dates.endDate;
+          console.log(`[Jira] Sprint ${sprint.name} -> ${dates.startDate.toISOString().split('T')[0]} to ${dates.endDate.toISOString().split('T')[0]}${isCurrentSprint ? ' ← CURRENT' : ''}`);
+
+          if (isCurrentSprint) {
+            console.log(`[Jira] Determined current version: ${version}`);
+            return version;
+          }
         }
       }
     }
 
-    // Find the version with sprint end date closest to today
-    // Prefer sprints that are ending soon (positive diff) over recently ended (negative diff)
-    for (const version of sortedVersions) {
-      const sprints = versionMap.get(version);
-
-      for (const sprint of sprints) {
-        const endDate = this.parseSprintEndDate(sprint.name);
-        if (!endDate) continue;
-
-        const diffDays = (endDate - now) / (1000 * 60 * 60 * 24);
-
-        // Score: prefer end dates slightly in the future (0-14 days) or just passed (-7 to 0 days)
-        // Lower absolute score = better match for "current"
-        let score;
-        if (diffDays >= 0 && diffDays <= 21) {
-          // Ending within 3 weeks - this is likely the current sprint
-          score = diffDays;
-        } else if (diffDays >= -7 && diffDays < 0) {
-          // Just ended within last week
-          score = Math.abs(diffDays) + 10; // Slight penalty for being in the past
-        } else {
-          // Too far in past or future
-          score = Math.abs(diffDays) + 100;
-        }
-
-        if (score < bestDiff) {
-          bestDiff = score;
-          currentVersion = version;
-        }
-      }
+    // Fallback: if no sprint contains today, use the most recent one (last in sorted list)
+    if (sortedVersions.length > 0) {
+      const fallbackVersion = sortedVersions[sortedVersions.length - 1];
+      console.log(`[Jira] No current sprint found by date, using fallback: ${fallbackVersion}`);
+      return fallbackVersion;
     }
 
-    if (currentVersion) {
-      console.log(`[Jira] Determined current version: ${currentVersion} (score: ${bestDiff.toFixed(1)})`);
-    }
-
-    // If no current found based on dates, use third-to-last version
-    if (!currentVersion && sortedVersions.length > 0) {
-      const index = Math.max(0, sortedVersions.length - 3);
-      currentVersion = sortedVersions[index];
-      console.log(`[Jira] No current version found by date, using fallback: ${currentVersion}`);
-    }
-
-    return currentVersion;
+    return null;
   }
 
   /**

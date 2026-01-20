@@ -151,9 +151,10 @@ parseSprintEndDate(sprintName) {
   // Returns Date object, handles year wrap-around
 }
 
-// Determines current sprint by finding closest end date to today
+// Determines current sprint by finding the one we're currently inside
 determineCurrentVersion(versionMap, sortedVersions) {
-  // Scoring: prefer sprints ending within 0-21 days (current)
+  // Scoring: prefer sprints ending within 0-14 days (currently running)
+  // Recently ended sprints (last 3 days) have higher penalty
   // Fallback to third-to-last if date parsing fails
 }
 ```

@@ -1,10 +1,18 @@
 # Jirafly Web
 
-Web application for analyzing Jira task distribution across teams (Serenity, Falcon, Discovery, Kosmik) by categories and sprints.
+Web application for analyzing Jira task distribution across teams by categories and sprints.
 
 ## Description
 
-Jirafly automatically fetches tasks from the KNJ project for all teams, categorizes them (Excluded, Maintenance, Bug, Product) and displays their distribution in two interactive charts + a detailed task table.
+Jirafly automatically fetches tasks from Jira projects, categorizes them (Excluded, Maintenance, Bug, Product) and displays their distribution in two interactive charts + a detailed task table.
+
+### Project Toggle (BE/FE)
+
+The application supports two project modes:
+- **BE** (Backend) - fetches from KNJ project, shows 4 teams (Serenity, Falcon, Discovery, Kosmik)
+- **FE** (Frontend) - fetches from SS project, single team (no team toggle)
+
+Use the **BE/FE button** in the top right to switch between projects. The selection is preserved in URL (`?project=fe`) for sharing.
 
 ### Two Pages
 
@@ -22,11 +30,12 @@ Jirafly automatically fetches tasks from the KNJ project for all teams, categori
 ## Key Features
 
 - **Two-page navigation** - tab-style switching between Overview and Next Sprint
-- **Multi-team support** - Serenity, Falcon, Discovery, Kosmik
+- **Project toggle (BE/FE)** - switch between Backend (KNJ) and Frontend (SS) projects
+- **Multi-team support** - Serenity, Falcon, Discovery, Kosmik (BE mode only)
 - **Team toggle** - switch between teams (URL parameter for sharing)
 - **Configurable sprint count** - URL parameter `sprints`
 - **Smart sprint detection** - automatically detects current sprint by end date
-- **Data caching** - no refetch when switching tabs, only on page refresh
+- **Data caching** - no refetch when switching tabs or projects (cached per mode)
 - **Color coding** - zero HLE (red), exceeded time (orange/red), category colors
 - **Interactive charts** - Chart.js with tooltips and legend
 - **Dark mode** - toggle between light and dark themes
@@ -88,7 +97,8 @@ Jirafly automatically fetches tasks from the KNJ project for all teams, categori
 ### URL Parameters
 
 ```
-http://localhost:3000/                        # Overview - All teams, 6 sprints
+http://localhost:3000/                        # Overview - BE mode, All teams, 6 sprints
+http://localhost:3000/?project=fe             # Overview - FE mode (SS project)
 http://localhost:3000/?team=serenity          # Overview - Serenity only
 http://localhost:3000/?sprints=10             # Overview - 10 sprints
 http://localhost:3000/?team=falcon&sprints=4  # Overview - Falcon, 4 sprints
@@ -96,7 +106,8 @@ http://localhost:3000/next-sprint             # Next Sprint - all tasks from nex
 ```
 
 **Parameters** (Overview page only):
-- `team` - filter by team (serenity, falcon, discovery, kosmik)
+- `project` - project mode (`fe` for Frontend/SS, default: Backend/KNJ)
+- `team` - filter by team (serenity, falcon, discovery, kosmik) - BE mode only
 - `sprints` - number of sprints (default: 6)
 
 ## Task Categories
@@ -174,6 +185,7 @@ Returns HTML page with Next Sprint view
 Fetches and processes tasks for all teams (Overview page)
 
 **Parameters**:
+- `project` (string, optional) - `fe` for Frontend/SS project (default: Backend/KNJ)
 - `sprints` (number, optional) - number of sprints (default: 6)
 
 ### `GET /api/next-sprint`

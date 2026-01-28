@@ -46,16 +46,18 @@ docker-compose logs -f       # View logs
 ### Data Flow
 
 **History page** (`/`):
-1. **Frontend** (browser) → sends optional team + sprints to `/api/data`
+1. **Frontend** (browser) → sends optional project + team + sprints to `/api/data`
 2. **Server** (`src/server.js`) → validates params, calls JiraClient
 3. **JiraClient** (`src/jira-client.js`) → fetches issues from Jira:
-   - Fetches all teams (Serenity, Falcon, Discovery, Kosmik)
+   - **BE mode** (default): Fetches from KNJ project, all teams (Serenity, Falcon, Discovery, Kosmik)
+   - **FE mode**: Fetches from SS project, single team (no team filtering)
    - Optimized pagination (2 pages for 6 sprints, stops early when enough found)
    - Filters to current sprint + N historical (no future sprints)
 4. **DataProcessor** (`src/data-processor.js`) → categorizes and aggregates issues
 5. **Server** → returns processed JSON to frontend (all teams + per-team data)
 6. **Frontend** → renders two Chart.js charts + detailed task table
-7. **Frontend** → team toggle button to filter display
+7. **Frontend** → project toggle (BE/FE) + team toggle button to filter display
+8. **Frontend** → caches data per project mode (switching doesn't refetch)
 
 **Next Sprint page** (`/next-sprint`):
 1. **Frontend** → calls `/api/next-sprint`
@@ -89,7 +91,8 @@ docker-compose logs -f       # View logs
 
 **`src/config.js`** - Centralized configuration
 - All magic numbers, custom field IDs, category definitions, chart colors
-- Team configurations (Serenity, Falcon, Discovery, Kosmik)
+- Team configurations (Serenity, Falcon, Discovery, Kosmik) for BE mode
+- Frontend team configuration (SS project) for FE mode
 - Default sprint count: 6
 - Custom field IDs:
   - `customfield_10000` - Sprint
@@ -99,18 +102,24 @@ docker-compose logs -f       # View logs
 **`src/html-template.js`** - Frontend generation
 - Single-page app embedded in server response
 - **Tab navigation**: Overview and Next sprint pages
-- **Data caching**: Caches API responses, no refetch on tab switch
+- **Data caching**: Caches API responses per project mode, no refetch on tab/mode switch
+- **Project toggle (BE/FE)**: Switches between Backend (KNJ) and Frontend (SS) projects
+  - BE mode: Shows team toggle, fetches from KNJ
+  - FE mode: Hides team toggle (single team), fetches from SS
+  - Cached separately (beDataCache, feDataCache)
 - **Overview page**:
   - Two stacked bar charts using Chart.js (both include Average column)
   - Percentage distribution by HLE (excludes Excluded category from 100%)
   - Absolute HLE values (shows effort distribution)
   - Detailed task table with sprint/assignee grouping
-  - Team toggle button (updates URL for sharing)
+  - Team toggle button (updates URL for sharing) - BE mode only
+  - Status bar shows current sprint with dates: "Now is 6.20 (20/1 - 2/2)"
 - **Next sprint page**:
   - Two stacked bar charts by team (excludes Epics in calculations)
   - Percentage distribution and absolute HLE values
   - Table with all tasks from next sprint
   - Team toggle button (default: "No team", can filter by team)
+  - Project toggle visible but disabled (BE only for now)
   - HLE toggle to show/hide HLE column (persisted in sessionStorage)
   - Columns: Assignee, WSJF, Task, HLE (toggleable), Due Date, Status
   - Due date badges with red color coding
@@ -125,10 +134,12 @@ docker-compose logs -f       # View logs
 - `/next-sprint` - Next sprint page (all tasks from next sprint)
 
 **Frontend parameters** (Overview page only):
-- `team` - Filter by team (serenity, falcon, discovery, kosmik) - short names accepted
+- `project` - Project mode (`fe` for Frontend/SS, default: Backend/KNJ)
+- `team` - Filter by team (serenity, falcon, discovery, kosmik) - short names accepted, BE mode only
 - `sprints` - Number of sprints to display (default: 6)
 
 **API parameters**:
+- `/api/data?project=fe` - Fetch from Frontend/SS project (default: Backend/KNJ)
 - `/api/data?sprints=N` - Override default sprint count (default: 6)
 - `/api/next-sprint` - Returns all tasks from next sprint with team info
 

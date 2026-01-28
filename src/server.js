@@ -61,51 +61,86 @@ app.get('/api/data', async (req, res) => {
   try {
     // Parse sprints parameter (optional, defaults to config value)
     const requestedSprintCount = req.query.sprints ? parseInt(req.query.sprints) : null;
+    // Parse project parameter (be or fe, defaults to be)
+    const project = req.query.project === 'fe' ? 'fe' : 'be';
 
-    console.log(`[API] Request: All teams, sprints=${requestedSprintCount || 'default'}`);
-    const result = await jiraClient.fetchAllTeamsIssues(requestedSprintCount);
-    const issues = result.issues;
-    const sprintCount = result.sprintCount;
-    const currentVersion = result.currentVersion;
+    if (project === 'fe') {
+      // Frontend mode - fetch from SS project
+      console.log(`[API] Request: Frontend, sprints=${requestedSprintCount || 'default'}`);
+      const result = await jiraClient.fetchFrontendIssues(requestedSprintCount);
+      const issues = result.issues;
+      const sprintCount = result.sprintCount;
+      const currentVersion = result.currentVersion;
+      const sprintDates = result.sprintDates;
 
-    // Add team information to each issue based on labels
-    const { TEAMS } = require('./config');
-    const teamLabels = Object.values(TEAMS).map(t => t.label);
+      // Process data (no team filtering for FE)
+      const allProcessedData = dataProcessor.processIssues(issues, 'sprint');
+      const allTableData = dataProcessor.prepareTableData(issues, 'sprint');
 
-    issues.forEach(issue => {
-      const labels = issue.fields.labels || [];
-      const teamLabel = labels.find(l => teamLabels.includes(l));
-      issue.team = teamLabel || 'Unknown';
-    });
+      console.log(`[API] Processed ${allProcessedData.totalIssues} FE issues into ${allProcessedData.groups.length} groups`);
 
-    // Process data for all teams combined (always group by sprint)
-    const allProcessedData = dataProcessor.processIssues(issues, 'sprint');
-    const allTableData = dataProcessor.prepareTableData(issues, 'sprint');
+      res.json({
+        all: {
+          ...allProcessedData,
+          tableData: allTableData
+        },
+        teams: [], // No teams for FE
+        teamData: {},
+        sprintCount,
+        currentVersion,
+        sprintDates,
+        mode: 'fe'
+      });
+    } else {
+      // Backend mode - existing behavior
+      console.log(`[API] Request: All teams, sprints=${requestedSprintCount || 'default'}`);
+      const result = await jiraClient.fetchAllTeamsIssues(requestedSprintCount);
+      const issues = result.issues;
+      const sprintCount = result.sprintCount;
+      const currentVersion = result.currentVersion;
+      const sprintDates = result.sprintDates;
 
-    // Process data for each team separately
-    const teamData = {};
-    teamLabels.forEach(teamLabel => {
-      const teamIssues = issues.filter(issue => issue.team === teamLabel);
-      if (teamIssues.length > 0) {
-        teamData[teamLabel] = {
-          processedData: dataProcessor.processIssues(teamIssues, 'sprint'),
-          tableData: dataProcessor.prepareTableData(teamIssues, 'sprint')
-        };
-      }
-    });
+      // Add team information to each issue based on labels
+      const { TEAMS } = require('./config');
+      const teamLabels = Object.values(TEAMS).map(t => t.label);
 
-    console.log(`[API] Processed ${allProcessedData.totalIssues} issues into ${allProcessedData.groups.length} groups`);
+      issues.forEach(issue => {
+        const labels = issue.fields.labels || [];
+        const teamLabel = labels.find(l => teamLabels.includes(l));
+        issue.team = teamLabel || 'Unknown';
+      });
 
-    res.json({
-      all: {
-        ...allProcessedData,
-        tableData: allTableData
-      },
-      teams: teamLabels,
-      teamData,
-      sprintCount,
-      currentVersion
-    });
+      // Process data for all teams combined (always group by sprint)
+      const allProcessedData = dataProcessor.processIssues(issues, 'sprint');
+      const allTableData = dataProcessor.prepareTableData(issues, 'sprint');
+
+      // Process data for each team separately
+      const teamData = {};
+      teamLabels.forEach(teamLabel => {
+        const teamIssues = issues.filter(issue => issue.team === teamLabel);
+        if (teamIssues.length > 0) {
+          teamData[teamLabel] = {
+            processedData: dataProcessor.processIssues(teamIssues, 'sprint'),
+            tableData: dataProcessor.prepareTableData(teamIssues, 'sprint')
+          };
+        }
+      });
+
+      console.log(`[API] Processed ${allProcessedData.totalIssues} issues into ${allProcessedData.groups.length} groups`);
+
+      res.json({
+        all: {
+          ...allProcessedData,
+          tableData: allTableData
+        },
+        teams: teamLabels,
+        teamData,
+        sprintCount,
+        currentVersion,
+        sprintDates,
+        mode: 'be'
+      });
+    }
   } catch (error) {
     console.error('[API] Error:', error);
     res.status(500).json({

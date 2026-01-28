@@ -124,6 +124,31 @@ const CSS_STYLES = `
     cursor: not-allowed;
   }
 
+  .mode-toggle {
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    border: none;
+    width: 41px;
+    height: 41px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .mode-toggle:hover:not(:disabled) {
+    background: var(--btn-hover);
+  }
+
+  .mode-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .theme-toggle {
     background: var(--btn-bg);
     color: var(--btn-text);
@@ -178,15 +203,25 @@ const CSS_STYLES = `
     font-weight: 400;
     font-size: 13px;
     transition: background 0.2s, border-color 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   #status.loading {
     border-color: var(--text-secondary);
+    justify-content: flex-start;
   }
 
   #status.error {
     border-color: var(--text-primary);
     color: #ef4444;
+    justify-content: flex-start;
+  }
+
+  .status-sprint-info {
+    color: var(--text-primary);
+    font-size: 13px;
   }
 
   .charts-container {
@@ -643,6 +678,7 @@ function generateHTML(options) {
       </div>
       <div class="header-buttons">
         <button id="teamToggle" class="group-toggle" disabled>All teams</button>
+        <button id="modeToggle" class="mode-toggle" title="Toggle BE/FE mode">BE</button>
         <button id="themeToggle" class="theme-toggle" title="Toggle dark mode">
           <svg id="moonIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
@@ -750,6 +786,8 @@ function generateHTML(options) {
     let nextSprintPercentageChart = null;
     let nextSprintHleChart = null;
     let allData = null; // Store all data for client-side filtering
+    let beDataCache = null; // Cache for BE mode data
+    let feDataCache = null; // Cache for FE mode data
     let rawIssues = []; // Store raw issues
     let currentTeam = 'All'; // Current selected team for history page
     let availableTeams = ['All']; // Available teams for history page
@@ -757,6 +795,7 @@ function generateHTML(options) {
     let nextSprintData = null; // Cache for next sprint data
     let currentNextSprintTeam = 'NoTeam'; // Current selected team for next-sprint page
     let availableNextSprintTeams = ['NoTeam']; // Available teams for next-sprint page
+    let currentMode = 'be'; // Current mode: 'be' or 'fe'
 
     const COLORS = ${JSON.stringify(CHART_COLORS)};
     const JIRA_BROWSE_URL = '${jiraBrowseUrl}';
@@ -773,8 +812,11 @@ function generateHTML(options) {
     function switchPage(page) {
       currentPage = page;
 
-      // Update URL using path
-      const newPath = page === 'history' ? '/' : '/' + page;
+      // Update URL using path, preserve mode param for history page
+      let newPath = page === 'history' ? '/' : '/' + page;
+      if (page === 'history' && currentMode === 'fe') {
+        newPath = '/?project=fe';
+      }
       window.history.pushState({}, '', newPath);
 
       // Update tabs
@@ -798,7 +840,7 @@ function generateHTML(options) {
         teamButton.disabled = !nextSprintData;
         updateNextSprintTeamButton(currentNextSprintTeam);
       } else {
-        teamButton.disabled = !allData;
+        teamButton.disabled = !allData || currentMode === 'fe';
         updateTeamButton(currentTeam);
       }
 
@@ -820,6 +862,13 @@ function generateHTML(options) {
       nextSprintTableWrapper.style.display = 'none';
 
       if (currentPage === 'history') {
+        // Show and enable mode toggle, update visibility
+        const modeToggle = document.getElementById('modeToggle');
+        modeToggle.style.display = '';
+        modeToggle.disabled = false;
+        updateModeButton();
+        updateTeamButtonVisibility();
+
         // Load history data if not cached
         if (!allData) {
           loadData();
@@ -830,11 +879,33 @@ function generateHTML(options) {
           renderTable(teamData.tableData);
           chartsContainer.style.display = 'grid';
           tableWrapper.style.display = 'block';
+
+          // Update status with sprint info on right
           const sprintInfo = allData.sprintCount ? \` from \${allData.sprintCount} sprints\` : '';
-          const currentInfo = allData.currentVersion ? \` (current sprint \${allData.currentVersion})\` : '';
-          statusEl.textContent = \`Loaded \${allData.all.totalIssues} tasks\${sprintInfo}\${currentInfo}\`;
+          const leftText = \`Loaded \${allData.all.totalIssues} tasks\${sprintInfo}\`;
+
+          let rightText = '';
+          if (allData.currentVersion) {
+            rightText = \`Now is \${allData.currentVersion}\`;
+            if (allData.sprintDates) {
+              rightText += \` (\${allData.sprintDates.startDate} - \${allData.sprintDates.endDate})\`;
+            }
+          }
+
+          if (rightText) {
+            statusEl.innerHTML = \`<span>\${leftText}</span><span class="status-sprint-info">\${rightText}</span>\`;
+          } else {
+            statusEl.textContent = leftText;
+          }
         }
       } else if (currentPage === 'next-sprint') {
+        // Show mode toggle but disabled on next-sprint page, show team toggle
+        const modeToggle = document.getElementById('modeToggle');
+        modeToggle.style.display = '';
+        modeToggle.disabled = true;
+        modeToggle.textContent = 'BE';
+        document.getElementById('teamToggle').style.display = '';
+
         // Load next-sprint data if not cached
         if (!nextSprintData) {
           loadNextSprintData();
@@ -1293,10 +1364,106 @@ function generateHTML(options) {
     function getURLParams() {
       const params = new URLSearchParams(window.location.search);
       const teamParam = params.get('team');
+      const projectParam = params.get('project');
       return {
         team: toFullTeamName(teamParam),
-        sprintCount: params.get('sprints') ? parseInt(params.get('sprints')) : null
+        sprintCount: params.get('sprints') ? parseInt(params.get('sprints')) : null,
+        project: projectParam === 'fe' ? 'fe' : 'be'
       };
+    }
+
+    function toggleMode() {
+      // Toggle between BE and FE
+      currentMode = currentMode === 'be' ? 'fe' : 'be';
+
+      // Update URL with mode parameter
+      const params = new URLSearchParams(window.location.search);
+      if (currentMode === 'be') {
+        params.delete('project');
+      } else {
+        params.set('project', 'fe');
+      }
+      // Remove team param when switching to FE (no teams in FE mode)
+      if (currentMode === 'fe') {
+        params.delete('team');
+      }
+      const newUrl = params.toString() ? \`?\${params.toString()}\` : window.location.pathname;
+      window.history.pushState({}, '', newUrl);
+
+      updateModeButton();
+      updateTeamButtonVisibility();
+
+      // Check if we have cached data for this mode
+      const cachedData = currentMode === 'be' ? beDataCache : feDataCache;
+
+      if (cachedData) {
+        // Use cached data
+        allData = cachedData;
+
+        // Set available teams from cached data
+        if (allData.teams && allData.teams.length > 0) {
+          availableTeams = ['All', ...allData.teams];
+        } else {
+          availableTeams = ['All'];
+        }
+
+        // Reset team selection
+        currentTeam = 'All';
+        updateTeamButton(currentTeam);
+
+        // Render cached data
+        const teamData = getDataForTeam(currentTeam);
+        renderCharts(teamData);
+        renderTable(teamData.tableData);
+        document.getElementById('chartsContainer').style.display = 'grid';
+        document.getElementById('tableWrapper').style.display = 'block';
+
+        // Update status
+        const statusEl = document.getElementById('status');
+        const sprintInfo = allData.sprintCount ? \` from \${allData.sprintCount} sprints\` : '';
+        const leftText = \`Loaded \${allData.all.totalIssues} tasks\${sprintInfo}\`;
+        let rightText = '';
+        if (allData.currentVersion) {
+          rightText = \`Now is \${allData.currentVersion}\`;
+          if (allData.sprintDates) {
+            rightText += \` (\${allData.sprintDates.startDate} - \${allData.sprintDates.endDate})\`;
+          }
+        }
+        if (rightText) {
+          statusEl.innerHTML = \`<span>\${leftText}</span><span class="status-sprint-info">\${rightText}</span>\`;
+        } else {
+          statusEl.textContent = leftText;
+        }
+
+        // Update team button state
+        const teamButton = document.getElementById('teamToggle');
+        teamButton.disabled = currentMode === 'fe';
+      } else {
+        // Hide content while loading new data
+        document.getElementById('chartsContainer').style.display = 'none';
+        document.getElementById('tableWrapper').style.display = 'none';
+
+        // Clear current data and reload
+        allData = null;
+        currentTeam = 'All';
+        availableTeams = ['All'];
+        loadData();
+      }
+    }
+
+    function updateModeButton() {
+      const button = document.getElementById('modeToggle');
+      button.textContent = currentMode.toUpperCase();
+    }
+
+    function updateTeamButtonVisibility() {
+      const teamButton = document.getElementById('teamToggle');
+      // Hide team button in FE mode (only one team) or on next-sprint page when in FE mode
+      if (currentMode === 'fe' && currentPage === 'history') {
+        teamButton.style.display = 'none';
+      } else {
+        teamButton.style.display = '';
+      }
     }
 
     function toggleTeam() {
@@ -1356,11 +1523,20 @@ function generateHTML(options) {
       const { team, sprintCount } = getURLParams();
       const statusEl = document.getElementById('status');
 
-      // Build API URL
-      let apiUrl = '/api/data';
+      updateModeButton();
+      updateTeamButtonVisibility();
+
+      // Build API URL - use currentMode which is already set
+      const params = new URLSearchParams();
       if (sprintCount) {
-        apiUrl += \`?sprints=\${sprintCount}\`;
+        params.set('sprints', sprintCount);
       }
+      if (currentMode === 'fe') {
+        params.set('project', 'fe');
+      }
+      const apiUrl = '/api/data' + (params.toString() ? \`?\${params.toString()}\` : '');
+
+      console.log('[loadData] currentMode:', currentMode, 'apiUrl:', apiUrl);
 
       statusEl.className = 'loading';
       statusEl.innerHTML = '<span class="spinner"></span>Loading data from Jira...';
@@ -1378,18 +1554,30 @@ function generateHTML(options) {
         // Store all data for client-side filtering
         allData = data;
 
+        // Cache data for this mode
+        if (currentMode === 'be') {
+          beDataCache = data;
+        } else {
+          feDataCache = data;
+        }
+
         // Check if user switched to different page during loading
         if (currentPage !== 'history') {
           return;
         }
 
-        // Set available teams
+        // Set available teams (empty for FE mode)
         if (data.teams && data.teams.length > 0) {
           availableTeams = ['All', ...data.teams];
+        } else {
+          availableTeams = ['All'];
         }
 
         // Set current team: URL param > sessionStorage > default 'All'
-        if (team && availableTeams.includes(team)) {
+        // In FE mode, always use 'All' (no team filtering)
+        if (currentMode === 'fe') {
+          currentTeam = 'All';
+        } else if (team && availableTeams.includes(team)) {
           currentTeam = team;
           // Also save to sessionStorage for cross-page sync
           sessionStorage.setItem('jirafly-selected-team', team);
@@ -1402,11 +1590,28 @@ function generateHTML(options) {
           }
         }
         updateTeamButton(currentTeam);
+        updateTeamButtonVisibility();
 
         statusEl.className = '';
+
+        // Build status message - left side
         const sprintInfo = data.sprintCount ? \` from \${data.sprintCount} sprints\` : '';
-        const currentInfo = data.currentVersion ? \` (current sprint \${data.currentVersion})\` : '';
-        statusEl.textContent = \`Loaded \${data.all.totalIssues} tasks\${sprintInfo}\${currentInfo}\`;
+        const leftText = \`Loaded \${data.all.totalIssues} tasks\${sprintInfo}\`;
+
+        // Build sprint info - right side
+        let rightText = '';
+        if (data.currentVersion) {
+          rightText = \`Now is \${data.currentVersion}\`;
+          if (data.sprintDates) {
+            rightText += \` (\${data.sprintDates.startDate} - \${data.sprintDates.endDate})\`;
+          }
+        }
+
+        if (rightText) {
+          statusEl.innerHTML = \`<span>\${leftText}</span><span class="status-sprint-info">\${rightText}</span>\`;
+        } else {
+          statusEl.textContent = leftText;
+        }
 
         // Render data for selected team
         const teamData = getDataForTeam(currentTeam);
@@ -1415,8 +1620,9 @@ function generateHTML(options) {
         document.getElementById('chartsContainer').style.display = 'grid';
         document.getElementById('tableWrapper').style.display = 'block';
 
-        // Enable team toggle button
-        document.getElementById('teamToggle').disabled = false;
+        // Enable team toggle button (only in BE mode)
+        const teamButton = document.getElementById('teamToggle');
+        teamButton.disabled = currentMode === 'fe';
       } catch (error) {
         statusEl.className = 'error';
         statusEl.textContent = \`Error: \${error.message}\`;
@@ -1737,6 +1943,9 @@ function generateHTML(options) {
         tab.classList.toggle('active', tab.dataset.page === currentPage);
       });
 
+      // Set up mode toggle listener
+      document.getElementById('modeToggle').addEventListener('click', toggleMode);
+
       // Set up team toggle listener
       document.getElementById('teamToggle').addEventListener('click', toggleTeam);
 
@@ -1744,10 +1953,19 @@ function generateHTML(options) {
       document.getElementById('hleToggle').addEventListener('change', toggleHleColumn);
       initHleToggle();
 
+      // Initialize mode from URL params
+      const { project } = getURLParams();
+      currentMode = project;
+      updateModeButton();
+
       // Load appropriate data based on current page
       if (currentPage === 'history') {
         loadData();
       } else if (currentPage === 'next-sprint') {
+        // Show mode toggle but disabled on next-sprint page
+        const modeToggle = document.getElementById('modeToggle');
+        modeToggle.disabled = true;
+        modeToggle.textContent = 'BE';
         loadNextSprintData();
         // Initialize team toggle for next-sprint page
         const teamButton = document.getElementById('teamToggle');

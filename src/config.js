@@ -60,7 +60,7 @@ const TEAM_DEFAULTS = Object.freeze({
   sprintCount: 6
 });
 
-// Team Configurations
+// Team Configurations (Backend teams)
 const TEAMS = Object.freeze({
   SERENITY: { name: 'TeamSerenity', label: 'TeamSerenity', ...TEAM_DEFAULTS },
   KOSMIK: { name: 'TeamKosmik', label: 'TeamKosmik', ...TEAM_DEFAULTS },
@@ -69,6 +69,13 @@ const TEAMS = Object.freeze({
 });
 
 const TEAM_SERENITY = TEAMS.SERENITY;
+
+// Frontend Team Configuration
+const FE_TEAM = Object.freeze({
+  project: 'SS',
+  label: 'Frontend',
+  sprintCount: 6
+});
 
 // JQL Query Filters
 const JQL_FILTERS = Object.freeze({
@@ -122,6 +129,7 @@ module.exports = {
   TEAM_DEFAULTS,
   TEAMS,
   TEAM_SERENITY,
+  FE_TEAM,
   JQL_FILTERS,
   VersionUtils,
   UNGROUPED

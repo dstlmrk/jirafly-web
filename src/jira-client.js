@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { JIRA_CONFIG, CUSTOM_FIELDS, TEAMS, TEAM_SERENITY, JQL_FILTERS, VersionUtils } = require('./config');
+const { JIRA_CONFIG, CUSTOM_FIELDS, TEAMS, TEAM_SERENITY, FE_TEAM, JQL_FILTERS, VersionUtils } = require('./config');
 
 // Only fetch fields we actually need (much faster than '*all')
 const REQUIRED_FIELDS = [
@@ -610,7 +610,118 @@ class JiraClient {
     return {
       issues: fullIssues,
       sprintCount: selectedVersions.length,
-      currentVersion
+      currentVersion,
+      sprintDates: this.getSprintDatesForVersion(versionMap, currentVersion)
+    };
+  }
+
+  /**
+   * Get start and end dates for a specific version
+   * @param {Map} versionMap - Map of version -> sprints
+   * @param {string} version - Version string
+   * @returns {Object|null} { startDate, endDate } formatted strings or null
+   */
+  getSprintDatesForVersion(versionMap, version) {
+    if (!versionMap || !version) return null;
+
+    const sprints = versionMap.get(version);
+    if (!sprints || sprints.length === 0) return null;
+
+    // Get dates from first sprint of this version
+    const dates = this.parseSprintDates(sprints[0].name);
+    if (!dates) return null;
+
+    // Format as d/m
+    const formatDate = (d) => `${d.getDate()}/${d.getMonth() + 1}`;
+
+    return {
+      startDate: formatDate(dates.startDate),
+      endDate: formatDate(dates.endDate)
+    };
+  }
+
+  /**
+   * Fetch issues for Frontend team (SS project)
+   * @param {number|null} requestedSprintCount - Optional override for sprint count
+   * @returns {Promise<Object>} Object with issues array and sprintCount
+   */
+  async fetchFrontendIssues(requestedSprintCount = null) {
+    const client = this.getAxiosInstance();
+    const sprintCountToUse = requestedSprintCount || FE_TEAM.sprintCount;
+
+    // Step 1: Fetch issues with ONLY sprint field to analyze available sprints
+    const sprintAnalysisJql = `project = "${FE_TEAM.project}" AND sprint is not EMPTY AND ${JQL_FILTERS.EXCLUDE_TYPES} ORDER BY updated DESC`;
+
+    // Calculate pages needed
+    const basePages = 2;
+    const maxPages = sprintCountToUse <= 6 ? basePages : Math.ceil(sprintCountToUse / 3);
+    const minSprintsNeeded = sprintCountToUse + 2;
+
+    console.log(`[Jira] Fetching FE issues for sprint analysis (target: ${sprintCountToUse} sprints, max pages: ${maxPages})`);
+    console.log(`[Jira] JQL: ${sprintAnalysisJql}`);
+
+    // Paginate through results to find all sprints
+    const allSprintAnalysisIssues = [];
+    let nextPageToken = null;
+    let pageCount = 0;
+    let foundSprintCount = 0;
+
+    do {
+      pageCount++;
+      const params = {
+        jql: sprintAnalysisJql,
+        maxResults: '100',
+        fields: 'customfield_10000,labels'
+      };
+      if (nextPageToken) {
+        params.nextPageToken = nextPageToken;
+      }
+
+      const response = await client.get('/rest/api/3/search/jql', { params });
+      const pageIssues = response.data.issues || [];
+      allSprintAnalysisIssues.push(...pageIssues);
+
+      // Count unique sprints found so far
+      const tempSprintMap = this.extractSprintsFromIssues(allSprintAnalysisIssues);
+      foundSprintCount = new Set(Array.from(tempSprintMap.values()).map(s => s.version.full)).size;
+
+      nextPageToken = response.data.nextPageToken;
+      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues, ${foundSprintCount} sprints found`);
+
+      // Stop early if we have enough sprints
+      if (foundSprintCount >= minSprintsNeeded) {
+        console.log(`[Jira] Found enough sprints (${foundSprintCount} >= ${minSprintsNeeded}), stopping pagination`);
+        break;
+      }
+
+      if (!nextPageToken || response.data.isLast) {
+        break;
+      }
+    } while (pageCount < maxPages);
+
+    console.log(`[Jira] Sprint analysis: ${allSprintAnalysisIssues.length} issues, ${foundSprintCount} sprints (${pageCount} pages)`);
+
+    // Step 2-4: Extract sprints, group by version, sort
+    const sprintMap = this.extractSprintsFromIssues(allSprintAnalysisIssues);
+    const { versionMap, sortedVersions } = this.groupSprintsByVersion(sprintMap);
+
+    // Step 5: Select versions and get sprint IDs (with current version filtering)
+    const { selectedVersions, sprintIds, currentVersion } = this.selectVersionsAndGetSprintIds(
+      versionMap, sortedVersions, sprintCountToUse, true
+    );
+
+    // Cache sprint info for reuse
+    this.sprintCache = { versionMap, sortedVersions };
+
+    // Step 6: Fetch ONLY issues from selected sprints
+    const fullJql = `project = "${FE_TEAM.project}" AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_TYPES_AND_CLOSED}`;
+    const fullIssues = await this.fetchIssuesByJQL(fullJql, `Frontend (${selectedVersions.length} versions)`);
+
+    return {
+      issues: fullIssues,
+      sprintCount: selectedVersions.length,
+      currentVersion,
+      sprintDates: this.getSprintDatesForVersion(versionMap, currentVersion)
     };
   }
 

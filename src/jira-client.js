@@ -487,6 +487,10 @@ class JiraClient {
       currentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
       console.log(`[Jira] Current version: ${currentVersion}`);
 
+      if (!currentVersion) {
+        throw new Error('No sprints found. Check Jira API credentials and project configuration.');
+      }
+
       let maxVersion;
       if (includeFutureSprints) {
         maxVersion = this.getMaxAllowedVersion(currentVersion);
@@ -704,6 +708,11 @@ class JiraClient {
 
     // Determine current version with 2-day extension (first 2 days of new sprint still show previous)
     currentVersion = this.determineCurrentVersion(versionMap, sortedVersions, 2);
+
+    if (!currentVersion) {
+      throw new Error('No sprints found. Check Jira API credentials and project configuration.');
+    }
+
     nextVersion = this.getNextVersion(currentVersion);
 
     console.log(`[Jira] Current version: ${currentVersion}, next version: ${nextVersion.full}`);

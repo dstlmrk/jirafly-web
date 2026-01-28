@@ -10,7 +10,9 @@
     "test:unit": "node tests/run-tests.js unit",
     "test:integration": "node tests/run-tests.js integration",
     "test:api": "node tests/run-tests.js api",
-    "test:auth": "node tests/run-tests.js auth"
+    "test:auth": "node tests/run-tests.js auth",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -18,6 +20,7 @@
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.40.0",
     "nodemon": "^3.0.1"
   },
   "engines": {

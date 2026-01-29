@@ -1209,30 +1209,58 @@ function generateHTML(options) {
       return Math.round((val / total) * 1000) / 10;
     }
 
+    /**
+     * Prepares percentage data for visualization, calculating both individual 
+     * group percentages and the weighted average across all groups.
+     */
     function preparePercentageData(groups, categories, hleByGroup) {
-      // Filter out Excluded from percentage calculations - it shouldn't count towards 100%
+      // Exclude categories that should not be part of the total (e.g., 'Excluded')
       const filteredCategories = categories.filter(cat => cat !== 'Excluded');
-
+    
       const percentageData = {};
       filteredCategories.forEach(category => percentageData[category] = []);
-
-      // Add percentages for each group - based on HLE, not count!
+    
+      // Tracking totals for weighted average calculation
+      const aggregateTotalsByCategory = {};
+      let overallTotalHle = 0;
+      
+      filteredCategories.forEach(cat => aggregateTotalsByCategory[cat] = 0);
+    
+      // Calculate percentages per group based on HLE
       groups.forEach(group => {
-        // Calculate total only from non-Excluded categories
-        const total = filteredCategories.reduce((sum, cat) => sum + (hleByGroup[group][cat] || 0), 0);
+        const groupHleData = hleByGroup[group] || {};
+        
+        // Calculate total HLE for the current group excluding 'Excluded' category
+        const groupTotal = filteredCategories.reduce(
+          (sum, cat) => sum + (groupHleData[cat] || 0), 
+          0
+        );
+        
         filteredCategories.forEach(category => {
-          const perc = calculatePercentage(hleByGroup[group][category], total);
+          const categoryValue = groupHleData[category] || 0;
+          
+          // Accumulate values for the global weighted average
+          aggregateTotalsByCategory[category] += categoryValue;
+          overallTotalHle += categoryValue;
+    
+          // Calculate and store the percentage for this specific group
+          const perc = calculatePercentage(categoryValue, groupTotal);
           percentageData[category].push(perc);
         });
       });
-
-      // Calculate average percentages across all groups
+    
+      // Calculate the weighted average across all groups
+      // Logic: (Sum of Category HLE across all groups) / (Total HLE across all groups)
       filteredCategories.forEach(category => {
-        const sum = percentageData[category].reduce((acc, val) => acc + val, 0);
-        const avg = sum / percentageData[category].length;
-        percentageData[category].push(avg);
+        const weightedAvg = calculatePercentage(
+          aggregateTotalsByCategory[category], 
+          overallTotalHle
+        );
+        
+        // Append the weighted average as the final element in the array
+        percentageData[category].push(weightedAvg);
       });
-
+    
       return percentageData;
     }
 

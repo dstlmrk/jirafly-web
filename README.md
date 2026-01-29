@@ -14,22 +14,29 @@ The application supports two project modes:
 
 Use the **BE/FE button** in the top right to switch between projects. The selection is preserved in URL (`?project=fe`) for sharing.
 
-### Two Pages
+### Three Pages
 
 **Overview** (`/`) - Task distribution analysis:
 1. **Percentage Distribution** - category ratio per sprint + average (by HLE)
 2. **Absolute HLE Values** - High Level Estimate sums by category + average
 3. **Detailed Table** - list of all tasks with HLE, tracked time, status
 
-**Next Sprint** (`/next-sprint`) - Next sprint planning:
+**Planning** (`/planning`) - Next sprint planning:
 - All tasks from next sprint with team filtering (default: "No team")
 - Two charts showing distribution by team (excludes Epics)
 - Columns: Assignee, WSJF, Task, HLE (toggleable), Due Date, Status
 - Due date badges with color coding (overdue = red)
 
+**Future Sprints** (`/next-sprints`) - Forward planning:
+- Tasks from 6 future sprints (both BE and FE projects)
+- Two charts showing percentage and HLE distribution by sprint
+- BE/FE toggle to switch between projects
+- Columns: Sprint, Assignee, WSJF, Task, HLE, Due Date, Status
+- Sprint grouping with visual separators
+
 ## Key Features
 
-- **Two-page navigation** - tab-style switching between Overview and Next Sprint
+- **Three-page navigation** - tab-style switching between Overview, Planning, and Future Sprints
 - **Project toggle (BE/FE)** - switch between Backend (KNJ) and Frontend (SS) projects
 - **Multi-team support** - Serenity, Falcon, Discovery, Kosmik (BE mode only)
 - **Team toggle** - switch between teams (URL parameter for sharing)
@@ -102,7 +109,9 @@ http://localhost:3000/?project=fe             # Overview - FE mode (SS project)
 http://localhost:3000/?team=serenity          # Overview - Serenity only
 http://localhost:3000/?sprints=10             # Overview - 10 sprints
 http://localhost:3000/?team=falcon&sprints=4  # Overview - Falcon, 4 sprints
-http://localhost:3000/next-sprint             # Next Sprint - all tasks from next sprint
+http://localhost:3000/planning                # Planning - all tasks from next sprint
+http://localhost:3000/next-sprints            # Future Sprints - 6 future sprints (BE + FE)
+http://localhost:3000/next-sprints?project=fe # Future Sprints - FE mode
 ```
 
 **Parameters** (Overview page only):
@@ -178,8 +187,11 @@ docker-compose logs -f
 ### `GET /`
 Returns HTML page with Overview view
 
-### `GET /next-sprint`
-Returns HTML page with Next Sprint view
+### `GET /planning`
+Returns HTML page with Planning view (next sprint)
+
+### `GET /next-sprints`
+Returns HTML page with Future Sprints view
 
 ### `GET /api/data`
 Fetches and processes tasks for all teams (Overview page)
@@ -189,12 +201,24 @@ Fetches and processes tasks for all teams (Overview page)
 - `sprints` (number, optional) - number of sprints (default: 6)
 
 ### `GET /api/next-sprint`
-Fetches all tasks from next sprint with team info (Next Sprint page)
+Fetches all tasks from next sprint with team info (Planning page)
 
 **Response**:
-- `issues` - array of tasks with WSJF, HLE, due date, team, assignee
-- `nextVersion` - next sprint version (e.g., "6.20")
-- `totalIssues` - total count
+- `beIssues` - array of BE tasks with WSJF, HLE, due date, team, assignee
+- `feIssues` - array of FE tasks
+- `beNextVersion` / `feNextVersion` - next sprint versions
+- `totalBeIssues` / `totalFeIssues` - total counts
+- `teams` - available team labels
+
+### `GET /api/next-sprints`
+Fetches all tasks from 6 future sprints (Future Sprints page)
+
+**Response**:
+- `beIssues` - array of BE tasks with sprint, WSJF, HLE, due date
+- `feIssues` - array of FE tasks
+- `beFutureVersions` / `feFutureVersions` - list of future sprint versions
+- `beCurrentVersion` / `feCurrentVersion` - current sprint versions
+- `totalBeIssues` / `totalFeIssues` - total counts
 - `teams` - available team labels
 
 ### `GET /health`

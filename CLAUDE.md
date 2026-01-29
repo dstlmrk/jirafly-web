@@ -59,11 +59,19 @@ docker-compose logs -f       # View logs
 7. **Frontend** → project toggle (BE/FE) + team toggle button to filter display
 8. **Frontend** → caches data per project mode (switching doesn't refetch)
 
-**Next Sprint page** (`/next-sprint`):
+**Planning page** (`/planning`):
 1. **Frontend** → calls `/api/next-sprint`
-2. **JiraClient** → fetches ALL issues from next sprint (includes Epics)
+2. **JiraClient** → fetches ALL issues from next sprint (includes Epics) for both BE and FE
 3. **DataProcessor** → prepares table data with WSJF, due date
-4. **Frontend** → renders table with team toggle (default: "No team", can filter by team)
+4. **Frontend** → renders charts + table with team toggle (default: "No team", can filter by team)
+5. **Frontend** → BE/FE toggle to switch between projects
+
+**Future Sprints page** (`/next-sprints`):
+1. **Frontend** → calls `/api/next-sprints`
+2. **JiraClient** → fetches issues from 6 future sprints (BE and FE in parallel)
+3. **DataProcessor** → prepares table data grouped by sprint with `prepareFutureSprintsTableData()`
+4. **Frontend** → renders two charts (percentage + HLE distribution by sprint)
+5. **Frontend** → renders table with sprint grouping, BE/FE toggle
 
 ### Core Modules
 
@@ -73,7 +81,8 @@ docker-compose logs -f       # View logs
 - Token-based pagination (`/rest/api/3/search/jql` with `nextPageToken`)
 - Retry logic with exponential backoff for rate limits and 5xx errors
 - **Overview**: Excludes Epic and Sub-task issue types, no future sprints
-- **Next sprint**: Includes Epics, fetches all issues from next sprint
+- **Planning**: Includes Epics, fetches all issues from next sprint (BE + FE)
+- **Future sprints**: Fetches issues from 6 future sprints (BE + FE in parallel)
 - **Sprint detection**: Parses end dates from sprint names, determines current sprint
 - **Sprint caching**: Caches sprint data to avoid refetching between pages
 - **Optimized fetching**: Only fetches required fields (not `*all`), minimal pagination
@@ -86,7 +95,7 @@ docker-compose logs -f       # View logs
   4. `Product` - everything else (default)
 - **Grouping**: By sprint using `customfield_10000` array, extracts X.Y version
 - **Aggregation**: counts issues per category + sums HLE values (`customfield_11605`)
-- **Table data**: `prepareTableData()` for Overview, `prepareUnassignedTableData()` for Next sprint
+- **Table data**: `prepareTableData()` for Overview, `prepareUnassignedTableData()` for Planning, `prepareFutureSprintsTableData()` for Future Sprints
 - **Date formatting**: `formatDueDate()` returns compact format (d.m.yyyy)
 
 **`src/config.js`** - Centralized configuration
@@ -101,7 +110,7 @@ docker-compose logs -f       # View logs
 
 **`src/html-template.js`** - Frontend generation
 - Single-page app embedded in server response
-- **Tab navigation**: Overview and Next sprint pages
+- **Tab navigation**: Overview, Planning, and Future Sprints pages
 - **Data caching**: Caches API responses per project mode, no refetch on tab/mode switch
 - **Project toggle (BE/FE)**: Switches between Backend (KNJ) and Frontend (SS) projects
   - BE mode: Shows team toggle, fetches from KNJ
@@ -114,16 +123,24 @@ docker-compose logs -f       # View logs
   - Detailed task table with sprint/assignee grouping
   - Team toggle button (updates URL for sharing) - BE mode only
   - Status bar shows current sprint with dates: "Now is 6.20 (20/1 - 2/2)"
-- **Next sprint page**:
+- **Planning page** (`/planning`):
   - Two stacked bar charts by team (excludes Epics in calculations)
   - Percentage distribution and absolute HLE values
   - Table with all tasks from next sprint
   - Team toggle button (default: "No team", can filter by team)
-  - Project toggle visible but disabled (BE only for now)
+  - BE/FE toggle to switch between projects
   - HLE toggle to show/hide HLE column (persisted in sessionStorage)
   - Columns: Assignee, WSJF, Task, HLE (toggleable), Due Date, Status
   - Due date badges with red color coding
   - Category-based title coloring
+- **Future Sprints page** (`/next-sprints`):
+  - Two stacked bar charts showing distribution by sprint
+  - Percentage distribution and absolute HLE values
+  - Table with all tasks from 6 future sprints
+  - Sprint column with badge, grouped by sprint with visual separators
+  - BE/FE toggle to switch between projects
+  - Columns: Sprint, Assignee, WSJF, Task, HLE, Due Date, Status
+  - Data cached for both BE and FE (single fetch)
 - Dark mode toggle
 - JetBrains Mono font throughout
 
@@ -131,7 +148,8 @@ docker-compose logs -f       # View logs
 
 **Routes**:
 - `/` - Overview page (task distribution analysis)
-- `/next-sprint` - Next sprint page (all tasks from next sprint)
+- `/planning` - Planning page (all tasks from next sprint)
+- `/next-sprints` - Future Sprints page (tasks from 6 future sprints)
 
 **Frontend parameters** (Overview page only):
 - `project` - Project mode (`fe` for Frontend/SS, default: Backend/KNJ)
@@ -141,7 +159,8 @@ docker-compose logs -f       # View logs
 **API parameters**:
 - `/api/data?project=fe` - Fetch from Frontend/SS project (default: Backend/KNJ)
 - `/api/data?sprints=N` - Override default sprint count (default: 6)
-- `/api/next-sprint` - Returns all tasks from next sprint with team info
+- `/api/next-sprint` - Returns all tasks from next sprint with team info (BE + FE)
+- `/api/next-sprints` - Returns all tasks from 6 future sprints (BE + FE)
 
 ### Authentication Architecture
 
@@ -242,7 +261,9 @@ AUTH_PASSWORD=secret         # optional, enables basic auth
 
 **Overview page**: Only current + past sprints shown (no future sprints).
 
-**Next sprint page**: Shows all tasks from next sprint, filterable by team (default: "No team").
+**Planning page**: Shows all tasks from next sprint, filterable by team (default: "No team"), BE/FE toggle.
+
+**Future Sprints page**: Shows tasks from 6 future sprints, BE/FE toggle, grouped by sprint.
 
 **HLE null handling**: Issues with null/undefined HLE values are treated as HLE=0 to prevent NaN aggregation bugs.
 

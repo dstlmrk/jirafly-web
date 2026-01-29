@@ -1,13 +1,13 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
 
-test.describe.serial('Next Sprint page', () => {
+test.describe.serial('Planning page', () => {
   /** @type {import('@playwright/test').Page} */
   let page;
 
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
-    await page.goto('/next-sprint');
+    await page.goto('/planning');
     // Wait for data to load from Jira
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
   });

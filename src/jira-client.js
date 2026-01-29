@@ -881,7 +881,8 @@ class JiraClient {
     return {
       issues: allIssues,
       nextVersion: nextVersion.full,
-      currentVersion
+      currentVersion,
+      sprintDates: this.getSprintDatesForVersion(versionMap, currentVersion)
     };
   }
 
@@ -976,7 +977,8 @@ class JiraClient {
     return {
       issues: allIssues,
       nextVersion: nextVersion.full,
-      currentVersion
+      currentVersion,
+      sprintDates: this.getSprintDatesForVersion(versionMap, currentVersion)
     };
   }
 
@@ -996,7 +998,203 @@ class JiraClient {
       beNextVersion: beResult.nextVersion,
       feNextVersion: feResult.nextVersion,
       beCurrentVersion: beResult.currentVersion,
-      feCurrentVersion: feResult.currentVersion
+      feCurrentVersion: feResult.currentVersion,
+      beSprintDates: beResult.sprintDates,
+      feSprintDates: feResult.sprintDates
+    };
+  }
+
+  /**
+   * Select future versions (currentVersion+1 to currentVersion+count) and get sprint IDs
+   * @param {Map} versionMap - Map of version -> sprints
+   * @param {Array} sortedVersions - Sorted version strings
+   * @param {string} currentVersion - Current version string (e.g., "6.20")
+   * @param {number} count - Number of future sprints to select (default: 6)
+   * @returns {Object} { futureVersions, sprintIds }
+   */
+  selectFutureVersionsAndGetSprintIds(versionMap, sortedVersions, currentVersion, count = 6) {
+    const [major, minor] = currentVersion.split('.').map(Number);
+
+    // Find all versions > currentVersion from sortedVersions
+    const futureVersions = sortedVersions.filter(v => {
+      const [vMajor, vMinor] = v.split('.').map(Number);
+      if (vMajor > major) return true;
+      if (vMajor === major && vMinor > minor) return true;
+      return false;
+    }).slice(0, count);
+
+    console.log(`[Jira] Future versions selected: ${futureVersions.join(', ')}`);
+
+    // Collect sprint IDs from those versions
+    const sprintIds = [];
+    for (const version of futureVersions) {
+      const sprintsForVersion = versionMap.get(version) || [];
+      for (const sprint of sprintsForVersion) {
+        sprintIds.push(sprint.id);
+        console.log(`[Jira] Including future sprint: ${sprint.name}`);
+      }
+    }
+
+    console.log(`[Jira] Selected ${sprintIds.length} future sprints`);
+
+    return { futureVersions, sprintIds };
+  }
+
+  /**
+   * Fetch issues for future sprints from a single project
+   * @param {string} project - 'be' or 'fe'
+   * @returns {Promise<Object>} Object with issues, currentVersion, futureVersions, sprintDates
+   */
+  async fetchFutureSprintsSingle(project) {
+    const client = this.getAxiosInstance();
+    const isFE = project === 'fe';
+
+    const allTeams = Object.values(TEAMS);
+
+    // Step 1: Do sprint analysis - use broader query to find future sprints
+    // Don't filter by team labels for BE to find more sprints
+    let sprintAnalysisJql;
+    if (isFE) {
+      sprintAnalysisJql = `project = "${FE_TEAM.project}" AND sprint is not EMPTY ORDER BY created DESC`;
+    } else {
+      sprintAnalysisJql = `project = "${TEAM_SERENITY.project}" AND sprint is not EMPTY ORDER BY created DESC`;
+    }
+
+    console.log(`[Jira] Fetching issues for sprint analysis (future-sprints, ${project})`);
+
+    // Fetch more issues to find future sprints
+    const allSprintAnalysisIssues = [];
+    let nextPageToken = null;
+    let pageCount = 0;
+    const maxPages = 5;
+
+    do {
+      pageCount++;
+      const params = {
+        jql: sprintAnalysisJql,
+        maxResults: '100',
+        fields: 'customfield_10000'
+      };
+      if (nextPageToken) {
+        params.nextPageToken = nextPageToken;
+      }
+
+      const response = await client.get('/rest/api/3/search/jql', { params });
+      const pageIssues = response.data.issues || [];
+      allSprintAnalysisIssues.push(...pageIssues);
+
+      nextPageToken = response.data.nextPageToken;
+      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues`);
+
+      if (!nextPageToken || response.data.isLast) {
+        break;
+      }
+    } while (pageCount < maxPages);
+
+    const sprintMap = this.extractSprintsFromIssues(allSprintAnalysisIssues);
+    const { versionMap, sortedVersions } = this.groupSprintsByVersion(sprintMap);
+
+    // Determine current version
+    const currentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
+
+    if (!currentVersion) {
+      console.log(`[Jira] No current sprint found for ${project}`);
+      return {
+        issues: [],
+        currentVersion: null,
+        futureVersions: [],
+        sprintDates: null
+      };
+    }
+
+    console.log(`[Jira] ${project.toUpperCase()} current version: ${currentVersion}`);
+
+    // Get sprint dates for current version
+    const sprintDates = this.getSprintDatesForVersion(versionMap, currentVersion);
+
+    // Get future versions and sprint IDs
+    const { futureVersions, sprintIds } = this.selectFutureVersionsAndGetSprintIds(
+      versionMap, sortedVersions, currentVersion, 6
+    );
+
+    if (sprintIds.length === 0) {
+      console.log(`[Jira] No future sprints found for ${project}`);
+      return {
+        issues: [],
+        currentVersion,
+        futureVersions: [],
+        sprintDates
+      };
+    }
+
+    // Fetch ALL issues from future sprints (no status filter - include all tasks)
+    let fullJql;
+    if (isFE) {
+      fullJql = `project = "${FE_TEAM.project}" AND sprint IN (${sprintIds.join(',')}) ORDER BY cf[11737] DESC, created DESC`;
+    } else {
+      fullJql = `project = "BE Skip Pay" AND sprint IN (${sprintIds.join(',')}) ORDER BY cf[11737] DESC, created DESC`;
+    }
+
+    console.log(`[Jira] Fetching ${project.toUpperCase()} future sprints issues`);
+    console.log(`[Jira] JQL: ${fullJql}`);
+
+    // Fetch with required fields
+    const allIssues = [];
+    nextPageToken = null;
+    pageCount = 0;
+
+    do {
+      pageCount++;
+      const params = {
+        jql: fullJql,
+        maxResults: '100',
+        fields: NEXT_SPRINT_REQUIRED_FIELDS
+      };
+      if (nextPageToken) {
+        params.nextPageToken = nextPageToken;
+      }
+
+      const fetchResponse = await client.get('/rest/api/3/search/jql', { params });
+      const pageIssues = fetchResponse.data.issues || [];
+      allIssues.push(...pageIssues);
+
+      nextPageToken = fetchResponse.data.nextPageToken;
+      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues`);
+
+      if (!nextPageToken || fetchResponse.data.isLast) {
+        break;
+      }
+    } while (pageCount < 10);
+
+    console.log(`[Jira] Fetched ${allIssues.length} ${project.toUpperCase()} issues for future sprints`);
+
+    return {
+      issues: allIssues,
+      currentVersion,
+      futureVersions,
+      sprintDates
+    };
+  }
+
+  /**
+   * Fetch future sprints issues from both BE and FE projects in parallel
+   * @returns {Promise<Object>} Combined result with beIssues, feIssues, and version info
+   */
+  async fetchBothProjectsFutureSprintsIssues() {
+    const [beResult, feResult] = await Promise.all([
+      this.fetchFutureSprintsSingle('be'),
+      this.fetchFutureSprintsSingle('fe')
+    ]);
+
+    return {
+      beIssues: beResult.issues,
+      feIssues: feResult.issues,
+      beCurrentVersion: beResult.currentVersion,
+      feCurrentVersion: feResult.currentVersion,
+      beFutureVersions: beResult.futureVersions,
+      feFutureVersions: feResult.futureVersions,
+      beSprintDates: beResult.sprintDates,
+      feSprintDates: feResult.sprintDates
     };
   }
 }

@@ -705,7 +705,8 @@ function generateHTML(options) {
 
     <div class="nav-tabs">
       <button id="tabHistory" class="nav-tab active" data-page="history">Overview</button>
-      <button id="tabNextSprint" class="nav-tab" data-page="next-sprint">Next sprint</button>
+      <button id="tabPlanning" class="nav-tab" data-page="planning">Planning</button>
+      <button id="tabFutureSprints" class="nav-tab" data-page="next-sprints">Future sprints</button>
     </div>
 
     <div id="status">Initializing...</div>
@@ -778,6 +779,37 @@ function generateHTML(options) {
       </table>
     </div>
 
+    <div class="charts-container" id="futureSprintsChartsContainer" style="display: none;">
+      <div class="chart-wrapper">
+        <div class="chart-title">Percentage Distribution by Category</div>
+        <canvas id="futureSprintsPercentageChart" class="chart-canvas"></canvas>
+      </div>
+
+      <div class="chart-wrapper">
+        <div class="chart-title">Absolute HLE Values by Category</div>
+        <canvas id="futureSprintsHleChart" class="chart-canvas"></canvas>
+      </div>
+    </div>
+
+    <div class="table-wrapper" id="futureSprintsTableWrapper" style="display: none;">
+      <div class="table-title" id="futureSprintsTableTitle">Future Sprints Tasks</div>
+      <table class="issues-table" id="futureSprintsTable">
+        <thead>
+          <tr>
+            <th class="col-sprint">Sprint</th>
+            <th class="col-assignee">Assignee</th>
+            <th class="col-wsjf">WSJF</th>
+            <th class="col-task">Task</th>
+            <th class="col-hle">HLE</th>
+            <th class="col-due">Due Date</th>
+            <th class="col-status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="futureSprintsTableBody">
+        </tbody>
+      </table>
+    </div>
+
     </div>
 
   <script>
@@ -785,17 +817,20 @@ function generateHTML(options) {
     let hleChart = null;
     let nextSprintPercentageChart = null;
     let nextSprintHleChart = null;
+    let futureSprintsPercentageChart = null;
+    let futureSprintsHleChart = null;
     let allData = null; // Store all data for client-side filtering
     let beDataCache = null; // Cache for BE mode data
     let feDataCache = null; // Cache for FE mode data
     let rawIssues = []; // Store raw issues
     let currentTeam = 'All'; // Current selected team for history page
     let availableTeams = ['All']; // Available teams for history page
-    let currentPage = 'history'; // Current page: 'history' or 'next-sprint'
+    let currentPage = 'history'; // Current page: 'history', 'planning', or 'next-sprints'
     let nextSprintData = null; // Cache for next sprint data
-    let currentNextSprintTeam = 'NoTeam'; // Current selected team for next-sprint page
-    let availableNextSprintTeams = ['NoTeam']; // Available teams for next-sprint page
+    let currentNextSprintTeam = 'NoTeam'; // Current selected team for planning page
+    let availableNextSprintTeams = ['NoTeam']; // Available teams for planning page
     let currentMode = 'be'; // Current mode: 'be' or 'fe'
+    let futureSprintsData = null; // Cache for future sprints data (contains both BE and FE)
 
     const COLORS = ${JSON.stringify(CHART_COLORS)};
     const JIRA_BROWSE_URL = '${jiraBrowseUrl}';
@@ -803,8 +838,11 @@ function generateHTML(options) {
     // Page navigation functions
     function getPageFromURL() {
       const path = window.location.pathname;
-      if (path === '/next-sprint') {
-        return 'next-sprint';
+      if (path === '/planning') {
+        return 'planning';
+      }
+      if (path === '/next-sprints') {
+        return 'next-sprints';
       }
       return 'history';
     }
@@ -817,6 +855,9 @@ function generateHTML(options) {
       if (page === 'history' && currentMode === 'fe') {
         newPath = '/?project=fe';
       }
+      if (page === 'next-sprints' && currentMode === 'fe') {
+        newPath = '/next-sprints?project=fe';
+      }
       window.history.pushState({}, '', newPath);
 
       // Update tabs
@@ -827,7 +868,7 @@ function generateHTML(options) {
       // Sync team selection from sessionStorage
       const savedTeam = sessionStorage.getItem('jirafly-selected-team');
       if (savedTeam) {
-        if (page === 'next-sprint' && availableNextSprintTeams.includes(savedTeam)) {
+        if (page === 'planning' && availableNextSprintTeams.includes(savedTeam)) {
           currentNextSprintTeam = savedTeam;
         } else if (page === 'history' && availableTeams.includes(savedTeam)) {
           currentTeam = savedTeam;
@@ -836,9 +877,12 @@ function generateHTML(options) {
 
       // Update team button based on page
       const teamButton = document.getElementById('teamToggle');
-      if (page === 'next-sprint') {
+      if (page === 'planning') {
         teamButton.disabled = !nextSprintData;
         updateNextSprintTeamButton(currentNextSprintTeam);
+      } else if (page === 'next-sprints') {
+        // Hide team toggle on future sprints page
+        teamButton.style.display = 'none';
       } else {
         teamButton.disabled = !allData || currentMode === 'fe';
         updateTeamButton(currentTeam);
@@ -853,6 +897,8 @@ function generateHTML(options) {
       const tableWrapper = document.getElementById('tableWrapper');
       const nextSprintChartsContainer = document.getElementById('nextSprintChartsContainer');
       const nextSprintTableWrapper = document.getElementById('unassignedTableWrapper');
+      const futureSprintsChartsContainer = document.getElementById('futureSprintsChartsContainer');
+      const futureSprintsTableWrapper = document.getElementById('futureSprintsTableWrapper');
       const statusEl = document.getElementById('status');
 
       // Hide all content first
@@ -860,6 +906,8 @@ function generateHTML(options) {
       tableWrapper.style.display = 'none';
       nextSprintChartsContainer.style.display = 'none';
       nextSprintTableWrapper.style.display = 'none';
+      futureSprintsChartsContainer.style.display = 'none';
+      futureSprintsTableWrapper.style.display = 'none';
 
       if (currentPage === 'history') {
         // Show and enable mode toggle, update visibility
@@ -894,7 +942,7 @@ function generateHTML(options) {
           tableWrapper.style.display = 'block';
 
           // Update status with sprint info on right
-          const sprintInfo = allData.sprintCount ? \` from \${allData.sprintCount} sprints\` : '';
+          const sprintInfo = allData.sprintCount ? \` from the last \${allData.sprintCount} sprints\` : '';
           const leftText = \`Loaded \${allData.all.totalIssues} tasks\${sprintInfo}\`;
 
           let rightText = '';
@@ -911,8 +959,8 @@ function generateHTML(options) {
             statusEl.textContent = leftText;
           }
         }
-      } else if (currentPage === 'next-sprint') {
-        // Show and enable mode toggle on next-sprint page
+      } else if (currentPage === 'planning') {
+        // Show and enable mode toggle on planning page
         const modeToggle = document.getElementById('modeToggle');
         modeToggle.style.display = '';
         modeToggle.disabled = false;
@@ -932,6 +980,27 @@ function generateHTML(options) {
           nextSprintTableWrapper.style.display = 'block';
           updateNextSprintStatus();
         }
+      } else if (currentPage === 'next-sprints') {
+        // Show and enable mode toggle on future sprints page
+        const modeToggle = document.getElementById('modeToggle');
+        modeToggle.style.display = '';
+        modeToggle.disabled = false;
+        modeToggle.textContent = currentMode.toUpperCase();
+        // Hide team toggle on future sprints page
+        document.getElementById('teamToggle').style.display = 'none';
+
+        // Load future sprints data if not cached
+        if (!futureSprintsData) {
+          loadFutureSprintsData();
+        } else {
+          // Use cached data - just re-render for current mode
+          renderFutureSprintsCharts();
+          const tableData = getFutureSprintsTableData();
+          renderFutureSprintsTable(tableData);
+          futureSprintsChartsContainer.style.display = 'grid';
+          futureSprintsTableWrapper.style.display = 'block';
+          updateFutureSprintsStatus();
+        }
       }
     }
 
@@ -950,7 +1019,7 @@ function generateHTML(options) {
         nextSprintData = await response.json();
 
         // Check if user switched to different page during loading
-        if (currentPage !== 'next-sprint') {
+        if (currentPage !== 'planning') {
           return;
         }
 
@@ -986,10 +1055,32 @@ function generateHTML(options) {
     function updateNextSprintStatus() {
       const statusEl = document.getElementById('status');
       const total = nextSprintData.totalBeIssues + nextSprintData.totalFeIssues;
-      const version = currentMode === 'fe'
+      const nextVersion = currentMode === 'fe'
         ? nextSprintData.feNextVersion
         : nextSprintData.beNextVersion;
-      statusEl.textContent = \`Loaded \${total} tasks for next sprint \${version}\`;
+      const currentVersion = currentMode === 'fe'
+        ? nextSprintData.feCurrentVersion
+        : nextSprintData.beCurrentVersion;
+      const sprintDates = currentMode === 'fe'
+        ? nextSprintData.feSprintDates
+        : nextSprintData.beSprintDates;
+
+      const leftText = \`Loaded \${total} tasks for sprint \${nextVersion}\`;
+
+      // Show current sprint info on the right (same format as other pages)
+      let rightText = '';
+      if (currentVersion) {
+        rightText = \`Now is \${currentVersion}\`;
+        if (sprintDates) {
+          rightText += \` (\${sprintDates.startDate} - \${sprintDates.endDate})\`;
+        }
+      }
+
+      if (rightText) {
+        statusEl.innerHTML = \`<span>\${leftText}</span><span class="status-sprint-info">\${rightText}</span>\`;
+      } else {
+        statusEl.textContent = leftText;
+      }
     }
 
     function getNextSprintDataForTeam(team) {
@@ -1161,6 +1252,264 @@ function generateHTML(options) {
       });
     }
 
+    // Future Sprints page functions
+    async function loadFutureSprintsData() {
+      const statusEl = document.getElementById('status');
+      statusEl.className = 'loading';
+      statusEl.innerHTML = '<span class="spinner"></span>Loading future sprints...';
+
+      try {
+        const response = await fetch('/api/next-sprints');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to load data');
+        }
+
+        const data = await response.json();
+
+        // Cache data (single cache for both BE and FE since we fetch both)
+        futureSprintsData = data;
+
+        // Check if user switched to different page during loading
+        if (currentPage !== 'next-sprints') {
+          return;
+        }
+
+        statusEl.className = '';
+        updateFutureSprintsStatus();
+
+        renderFutureSprintsCharts();
+        const tableData = getFutureSprintsTableData();
+        renderFutureSprintsTable(tableData);
+        document.getElementById('futureSprintsChartsContainer').style.display = 'grid';
+        document.getElementById('futureSprintsTableWrapper').style.display = 'block';
+      } catch (error) {
+        statusEl.className = 'error';
+        statusEl.textContent = \`Error: \${error.message}\`;
+      }
+    }
+
+    function getFutureSprintsTableData() {
+      if (!futureSprintsData) return [];
+      return currentMode === 'fe' ? futureSprintsData.feIssues : futureSprintsData.beIssues;
+    }
+
+    function updateFutureSprintsStatus() {
+      const statusEl = document.getElementById('status');
+      const totalBe = futureSprintsData.totalBeIssues || 0;
+      const totalFe = futureSprintsData.totalFeIssues || 0;
+      const total = totalBe + totalFe;
+      const versions = futureSprintsData.beFutureVersions || futureSprintsData.feFutureVersions || [];
+      const currentVersion = futureSprintsData.beCurrentVersion || futureSprintsData.feCurrentVersion;
+      const sprintDates = futureSprintsData.beSprintDates || futureSprintsData.feSprintDates;
+
+      const leftText = \`Loaded \${total} tasks from \${versions.length} future sprints\`;
+
+      let rightText = '';
+      if (currentVersion) {
+        rightText = \`Now is \${currentVersion}\`;
+        if (sprintDates) {
+          rightText += \` (\${sprintDates.startDate} - \${sprintDates.endDate})\`;
+        }
+      }
+
+      if (rightText) {
+        statusEl.innerHTML = \`<span>\${leftText}</span><span class="status-sprint-info">\${rightText}</span>\`;
+      } else {
+        statusEl.textContent = leftText;
+      }
+    }
+
+    function renderFutureSprintsCharts() {
+      if (!futureSprintsData) return;
+
+      const categories = ['Excluded', 'Maintenance', 'Bug', 'Product'];
+
+      // Get data based on current mode
+      const issues = currentMode === 'fe' ? futureSprintsData.feIssues : futureSprintsData.beIssues;
+      const futureVersions = currentMode === 'fe' ? futureSprintsData.feFutureVersions : futureSprintsData.beFutureVersions;
+
+      if (!futureVersions || futureVersions.length === 0) {
+        console.log('No future versions to render');
+        return;
+      }
+
+      // Calculate HLE by sprint and category
+      const hleByGroup = {};
+      futureVersions.forEach(version => {
+        hleByGroup[version] = {};
+        categories.forEach(cat => hleByGroup[version][cat] = 0);
+      });
+
+      (issues || []).forEach(issue => {
+        if (issue.issueType === 'Epic') return; // Skip Epics
+        const sprint = issue.sprint;
+        if (!sprint || !hleByGroup[sprint]) return;
+        const category = issue.category || 'Product';
+        const hle = issue.hle || 0;
+        hleByGroup[sprint][category] = (hleByGroup[sprint][category] || 0) + hle;
+      });
+
+      // Prepare percentage data (exclude Excluded from 100%)
+      const percentageCategories = categories.filter(cat => cat !== 'Excluded');
+      const percentageData = {};
+      percentageCategories.forEach(cat => percentageData[cat] = []);
+
+      futureVersions.forEach(version => {
+        const total = percentageCategories.reduce((sum, cat) => sum + (hleByGroup[version][cat] || 0), 0);
+        percentageCategories.forEach(cat => {
+          const perc = total > 0 ? Math.round((hleByGroup[version][cat] || 0) / total * 1000) / 10 : 0;
+          percentageData[cat].push(perc);
+        });
+      });
+
+      // Prepare HLE data
+      const hleData = {};
+      categories.forEach(cat => {
+        hleData[cat] = futureVersions.map(version => hleByGroup[version][cat] || 0);
+      });
+
+      // Destroy old charts
+      if (futureSprintsPercentageChart) futureSprintsPercentageChart.destroy();
+      if (futureSprintsHleChart) futureSprintsHleChart.destroy();
+
+      const chartLabels = [...futureVersions];
+
+      const percentageCtx = document.getElementById('futureSprintsPercentageChart').getContext('2d');
+      futureSprintsPercentageChart = new Chart(percentageCtx, buildChartConfig(
+        chartLabels, percentageCategories, percentageData,
+        {
+          min: 0,
+          max: 100,
+          ticks: { callback: value => value + '%' },
+          title: { display: true, text: 'Percentage (%) by HLE', font: { family: 'JetBrains Mono', size: 11 } }
+        },
+        value => value.toFixed(1) + '%'
+      ));
+
+      const hleCtx = document.getElementById('futureSprintsHleChart').getContext('2d');
+      futureSprintsHleChart = new Chart(hleCtx, buildChartConfig(
+        chartLabels, categories, hleData,
+        {
+          beginAtZero: true,
+          title: { display: true, text: 'HLE Value', font: { family: 'JetBrains Mono', size: 11 } }
+        },
+        value => value.toFixed(2)
+      ));
+    }
+
+    function renderFutureSprintsTable(tableData) {
+      const tbody = document.getElementById('futureSprintsTableBody');
+      tbody.innerHTML = '';
+
+      const modeLabel = currentMode === 'fe' ? 'FE' : 'BE';
+      const tableTitle = \`\${modeLabel} Future Sprints Tasks (\${tableData.length})\`;
+      document.getElementById('futureSprintsTableTitle').textContent = tableTitle;
+
+      let prevSprint = null;
+      let prevAssignee = null;
+
+      tableData.forEach(row => {
+        const tr = document.createElement('tr');
+
+        // Add sprint-start class for visual separation between sprints
+        if (row.sprint !== prevSprint && prevSprint !== null) {
+          tr.classList.add('sprint-start');
+        }
+
+        // Highlight rows with 0 HLE
+        if (!row.hle || row.hle === 0) {
+          tr.classList.add('row-hle-zero');
+        }
+
+        // Sprint column (show badge only on first occurrence per sprint group)
+        const sprintTd = document.createElement('td');
+        sprintTd.className = 'col-sprint';
+        if (row.sprint !== prevSprint) {
+          sprintTd.innerHTML = \`<span class="sprint-badge">\${row.sprint}</span>\`;
+          prevSprint = row.sprint;
+          prevAssignee = null; // Reset assignee when sprint changes
+        } else {
+          sprintTd.innerHTML = '<span class="empty-cell">—</span>';
+        }
+        tr.appendChild(sprintTd);
+
+        // Assignee column (show only if different from previous within same sprint)
+        const assigneeTd = document.createElement('td');
+        assigneeTd.className = 'col-assignee';
+        if (row.assignee !== prevAssignee) {
+          assigneeTd.textContent = row.assignee || 'Unassigned';
+          prevAssignee = row.assignee;
+        } else {
+          assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
+        }
+        tr.appendChild(assigneeTd);
+
+        // WSJF column
+        const wsjfTd = document.createElement('td');
+        wsjfTd.className = 'col-wsjf';
+        wsjfTd.textContent = row.wsjf ? row.wsjf.toFixed(1) : '-';
+        tr.appendChild(wsjfTd);
+
+        // Task column
+        const taskTd = document.createElement('td');
+        taskTd.className = 'col-task';
+        const jiraUrl = \`\${JIRA_BROWSE_URL}\${row.key}\`;
+        let typeClass = 'task-type';
+        if (row.issueType === 'Bug') typeClass += ' task-type-bug';
+        else if (row.issueType === 'Epic') typeClass += ' task-type-epic';
+        else if (row.issueType === 'Analysis') typeClass += ' task-type-analysis';
+
+        // Summary class based on category
+        let summaryClass = 'task-summary';
+        if (row.category === 'Maintenance') summaryClass += ' task-summary-maintenance';
+        else if (row.category === 'Excluded') summaryClass += ' task-summary-excluded';
+
+        taskTd.innerHTML = \`
+          <span class="\${typeClass}">\${row.typeAbbr}</span>
+          <a href="\${jiraUrl}" target="_blank" class="task-key">\${row.key}</a>:
+          <span class="\${summaryClass}">\${row.summary}</span>
+        \`;
+        tr.appendChild(taskTd);
+
+        // HLE column
+        const hleTd = document.createElement('td');
+        hleTd.className = 'col-hle';
+        if (!row.hle || row.hle === 0) {
+          hleTd.innerHTML = '<span class="hle-zero">0</span>';
+        } else {
+          hleTd.textContent = row.hle.toFixed(2);
+        }
+        tr.appendChild(hleTd);
+
+        // Due Date column
+        const dueTd = document.createElement('td');
+        dueTd.className = 'col-due';
+        if (row.dueDateRaw) {
+          dueTd.innerHTML = \`<span class="due-badge">\${row.dueDate}</span>\`;
+        } else {
+          dueTd.innerHTML = '<span class="empty-cell">-</span>';
+        }
+        tr.appendChild(dueTd);
+
+        // Status column
+        const statusTd = document.createElement('td');
+        statusTd.className = 'col-status';
+        const doneStatuses = ['Done', 'In Testing', 'Merged'];
+        const reviewStatuses = ['In Review'];
+        let statusClass = 'status-label';
+        if (doneStatuses.includes(row.status)) {
+          statusClass += ' status-done';
+        } else if (reviewStatuses.includes(row.status)) {
+          statusClass += ' status-review';
+        }
+        statusTd.innerHTML = \`<span class="\${statusClass}">\${row.status}</span>\`;
+        tr.appendChild(statusTd);
+
+        tbody.appendChild(tr);
+      });
+    }
+
     // Theme toggle functionality
     function initTheme() {
       const savedTheme = localStorage.getItem('jirafly-theme');
@@ -1208,7 +1557,7 @@ function generateHTML(options) {
       const colors = getChartColors();
       const chartColors = getDarkModeChartColors();
 
-      const allCharts = [percentageChart, hleChart, nextSprintPercentageChart, nextSprintHleChart].filter(c => c);
+      const allCharts = [percentageChart, hleChart, nextSprintPercentageChart, nextSprintHleChart, futureSprintsPercentageChart, futureSprintsHleChart].filter(c => c);
 
       allCharts.forEach(chart => {
         // Update legend
@@ -1424,8 +1773,8 @@ function generateHTML(options) {
 
       updateModeButton();
 
-      // Handle next-sprint page toggle
-      if (currentPage === 'next-sprint') {
+      // Handle planning page toggle
+      if (currentPage === 'planning') {
         // Update team toggle visibility (hide in FE mode)
         document.getElementById('teamToggle').style.display = currentMode === 'be' ? '' : 'none';
 
@@ -1441,6 +1790,18 @@ function generateHTML(options) {
         renderNextSprintTable(filteredData);
 
         // Charts don't need to be re-rendered (they always show all data)
+        return;
+      }
+
+      // Handle future sprints page toggle
+      if (currentPage === 'next-sprints') {
+        // Data already loaded for both modes - just re-render
+        if (futureSprintsData) {
+          renderFutureSprintsCharts();
+          const tableData = getFutureSprintsTableData();
+          renderFutureSprintsTable(tableData);
+          updateFutureSprintsStatus();
+        }
         return;
       }
 
@@ -1474,7 +1835,7 @@ function generateHTML(options) {
 
         // Update status
         const statusEl = document.getElementById('status');
-        const sprintInfo = allData.sprintCount ? \` from \${allData.sprintCount} sprints\` : '';
+        const sprintInfo = allData.sprintCount ? \` from the last \${allData.sprintCount} sprints\` : '';
         const leftText = \`Loaded \${allData.all.totalIssues} tasks\${sprintInfo}\`;
         let rightText = '';
         if (allData.currentVersion) {
@@ -1512,7 +1873,7 @@ function generateHTML(options) {
 
     function updateTeamButtonVisibility() {
       const teamButton = document.getElementById('teamToggle');
-      // Hide team button in FE mode (only one team) or on next-sprint page when in FE mode
+      // Hide team button in FE mode (only one team) or on planning page when in FE mode
       if (currentMode === 'fe' && currentPage === 'history') {
         teamButton.style.display = 'none';
       } else {
@@ -1521,7 +1882,7 @@ function generateHTML(options) {
     }
 
     function toggleTeam() {
-      if (currentPage === 'next-sprint') {
+      if (currentPage === 'planning') {
         toggleNextSprintTeam();
         return;
       }
@@ -1649,7 +2010,7 @@ function generateHTML(options) {
         statusEl.className = '';
 
         // Build status message - left side
-        const sprintInfo = data.sprintCount ? \` from \${data.sprintCount} sprints\` : '';
+        const sprintInfo = data.sprintCount ? \` from the last \${data.sprintCount} sprints\` : '';
         const leftText = \`Loaded \${data.all.totalIssues} tasks\${sprintInfo}\`;
 
         // Build sprint info - right side
@@ -1771,11 +2132,12 @@ function generateHTML(options) {
       if (nextSprintPercentageChart) nextSprintPercentageChart.destroy();
       if (nextSprintHleChart) nextSprintHleChart.destroy();
 
-      const chartLabels = [...teamNames, 'BE Sum', 'FE Team'];
+      const percentageLabels = [...teamNames, 'BE Avg', 'FE Team'];
+      const hleLabels = [...teamNames, 'BE Sum', 'FE Team'];
 
       const percentageCtx = document.getElementById('nextSprintPercentageChart').getContext('2d');
       nextSprintPercentageChart = new Chart(percentageCtx, buildChartConfig(
-        chartLabels, percentageCategories, percentageData,
+        percentageLabels, percentageCategories, percentageData,
         {
           min: 0,
           max: 100,
@@ -1787,7 +2149,7 @@ function generateHTML(options) {
 
       const hleCtx = document.getElementById('nextSprintHleChart').getContext('2d');
       nextSprintHleChart = new Chart(hleCtx, buildChartConfig(
-        chartLabels, categories, hleData,
+        hleLabels, categories, hleData,
         {
           beginAtZero: true,
           title: { display: true, text: 'HLE Value', font: { family: 'JetBrains Mono', size: 11 } }
@@ -2033,17 +2395,25 @@ function generateHTML(options) {
       // Load appropriate data based on current page
       if (currentPage === 'history') {
         loadData();
-      } else if (currentPage === 'next-sprint') {
-        // Enable mode toggle on next-sprint page
+      } else if (currentPage === 'planning') {
+        // Enable mode toggle on planning page
         const modeToggle = document.getElementById('modeToggle');
         modeToggle.disabled = false;
         modeToggle.textContent = currentMode.toUpperCase();
         loadNextSprintData();
-        // Initialize team toggle for next-sprint page (show only in BE mode)
+        // Initialize team toggle for planning page (show only in BE mode)
         const teamButton = document.getElementById('teamToggle');
         teamButton.disabled = true; // Will be enabled after data loads
         teamButton.textContent = 'No team';
         teamButton.style.display = currentMode === 'be' ? '' : 'none';
+      } else if (currentPage === 'next-sprints') {
+        // Enable mode toggle on future sprints page
+        const modeToggle = document.getElementById('modeToggle');
+        modeToggle.disabled = false;
+        modeToggle.textContent = currentMode.toUpperCase();
+        loadFutureSprintsData();
+        // Hide team toggle on future sprints page
+        document.getElementById('teamToggle').style.display = 'none';
       }
     });
   </script>

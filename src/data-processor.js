@@ -425,6 +425,91 @@ function prepareUnassignedTableData(issues) {
 }
 
 /**
+ * Prepare table data for future sprints page
+ * Combines aspects of prepareTableData() (sprint column) and prepareUnassignedTableData() (WSJF, due date)
+ * @param {Array} issues - Array of Jira issue objects
+ * @returns {Array} Array of issue data for future sprints table display
+ */
+function prepareFutureSprintsTableData(issues) {
+  const tableData = [];
+
+  for (const issue of issues) {
+    const fields = issue.fields;
+
+    // Get sprint version
+    const sprint = extractGroupKey(issue, GROUP_BY_OPTIONS.SPRINT);
+
+    // Get assignee
+    const assignee = fields.assignee?.displayName || 'Unassigned';
+
+    // Get WSJF value
+    const wsjf = fields[CUSTOM_FIELDS.WSJF] || 0;
+
+    // Get type abbreviation and issue type
+    const issueType = fields.issuetype.name;
+    const typeAbbr = getTypeAbbreviation(issueType);
+
+    // Get category for coloring
+    const category = categorizeIssue(issue);
+
+    // Truncate summary to 80 chars
+    let summary = fields.summary || '';
+    if (summary.length > 80) {
+      summary = summary.substring(0, 77) + '...';
+    }
+
+    // Get HLE
+    const hle = parseHLE(fields[CUSTOM_FIELDS.HLE], issue.key);
+
+    // Get due date
+    const dueDateRaw = fields.duedate || null;
+    const dueDate = formatDueDate(dueDateRaw);
+
+    // Get status
+    const status = fields.status?.name || 'Unknown';
+
+    tableData.push({
+      sprint,
+      assignee,
+      wsjf,
+      typeAbbr,
+      issueType,
+      key: issue.key,
+      summary,
+      hle: hle || 0,
+      dueDate,
+      dueDateRaw,
+      status,
+      category,
+      team: issue.team || null
+    });
+  }
+
+  // Sort by: sprint (ASC - earliest future first) → assignee → WSJF (DESC) → key
+  tableData.sort((a, b) => {
+    // Sort sprint numerically - ASCENDING (earliest future first)
+    if (a.sprint !== b.sprint) {
+      if (a.sprint === UNGROUPED) return 1;
+      if (b.sprint === UNGROUPED) return -1;
+      return a.sprint.localeCompare(b.sprint, undefined, { numeric: true });
+    }
+    // Then by assignee
+    if (a.assignee !== b.assignee) {
+      if (a.assignee === 'Unassigned') return 1;
+      if (b.assignee === 'Unassigned') return -1;
+      return a.assignee.localeCompare(b.assignee);
+    }
+    // Then by WSJF descending (highest priority first)
+    if (a.wsjf !== b.wsjf) {
+      return b.wsjf - a.wsjf;
+    }
+    return a.key.localeCompare(b.key);
+  });
+
+  return tableData;
+}
+
+/**
  * Process all issues and aggregate by group and category
  * @param {Array} issues - Array of Jira issue objects
  * @param {string} groupBy - 'fix_version' or 'sprint'
@@ -456,6 +541,7 @@ module.exports = {
   processIssues,
   prepareTableData,
   prepareUnassignedTableData,
+  prepareFutureSprintsTableData,
 
   // Helper functions (exported for testing)
   extractVersionNumber,

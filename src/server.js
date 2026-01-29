@@ -51,7 +51,12 @@ app.get('/', (req, res) => {
   res.send(generateHTML({ jiraUrl: process.env.JIRA_URL }));
 });
 
-app.get('/next-sprint', (req, res) => {
+app.get('/planning', (req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(generateHTML({ jiraUrl: process.env.JIRA_URL }));
+});
+
+app.get('/next-sprints', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(generateHTML({ jiraUrl: process.env.JIRA_URL }));
 });
@@ -183,6 +188,57 @@ app.get('/api/next-sprint', async (req, res) => {
       feNextVersion: result.feNextVersion,
       beCurrentVersion: result.beCurrentVersion,
       feCurrentVersion: result.feCurrentVersion,
+      beSprintDates: result.beSprintDates,
+      feSprintDates: result.feSprintDates,
+      totalBeIssues: result.beIssues.length,
+      totalFeIssues: result.feIssues.length,
+      teams: teamLabels
+    });
+  } catch (error) {
+    console.error('[API] Error:', error);
+    res.status(500).json({
+      error: error.message || 'Internal server error'
+    });
+  }
+});
+
+// API endpoint for 6 future sprints (fetches BE and FE in parallel)
+app.get('/api/next-sprints', async (req, res) => {
+  try {
+    console.log(`[API] Request: Future sprints (BE + FE)`);
+
+    const result = await jiraClient.fetchBothProjectsFutureSprintsIssues();
+
+    // Add team information to BE issues based on labels
+    const { TEAMS } = require('./config');
+    const teamLabels = Object.values(TEAMS).map(t => t.label);
+
+    result.beIssues.forEach(issue => {
+      const labels = issue.fields.labels || [];
+      const teamLabel = labels.find(l => teamLabels.includes(l));
+      issue.team = teamLabel || null;
+    });
+
+    // FE issues don't have team labels
+    result.feIssues.forEach(issue => {
+      issue.team = null;
+    });
+
+    // Prepare table data for both
+    const beTableData = dataProcessor.prepareFutureSprintsTableData(result.beIssues);
+    const feTableData = dataProcessor.prepareFutureSprintsTableData(result.feIssues);
+
+    console.log(`[API] Fetched ${result.beIssues.length} BE issues and ${result.feIssues.length} FE issues for future sprints`);
+
+    res.json({
+      beIssues: beTableData,
+      feIssues: feTableData,
+      beCurrentVersion: result.beCurrentVersion,
+      feCurrentVersion: result.feCurrentVersion,
+      beFutureVersions: result.beFutureVersions,
+      feFutureVersions: result.feFutureVersions,
+      beSprintDates: result.beSprintDates,
+      feSprintDates: result.feSprintDates,
       totalBeIssues: result.beIssues.length,
       totalFeIssues: result.feIssues.length,
       teams: teamLabels

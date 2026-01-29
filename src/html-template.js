@@ -1760,9 +1760,9 @@ function generateHTML(options) {
       const hleData = {};
       categories.forEach(cat => {
         hleData[cat] = teamNames.map(team => hleByTeam[team][cat] || 0);
-        // Add BE average
-        const avg = hleData[cat].reduce((sum, val) => sum + val, 0) / hleData[cat].length;
-        hleData[cat].push(Math.round(avg * 100) / 100);
+        // Add BE sum
+        const sum = hleData[cat].reduce((sum, val) => sum + val, 0);
+        hleData[cat].push(Math.round(sum * 100) / 100);
         // Add FE value
         hleData[cat].push(feHle[cat] || 0);
       });
@@ -1771,7 +1771,7 @@ function generateHTML(options) {
       if (nextSprintPercentageChart) nextSprintPercentageChart.destroy();
       if (nextSprintHleChart) nextSprintHleChart.destroy();
 
-      const chartLabels = [...teamNames, 'BE Avg', 'FE Team'];
+      const chartLabels = [...teamNames, 'BE Sum', 'FE Team'];
 
       const percentageCtx = document.getElementById('nextSprintPercentageChart').getContext('2d');
       nextSprintPercentageChart = new Chart(percentageCtx, buildChartConfig(

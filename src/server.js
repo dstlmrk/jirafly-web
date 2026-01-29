@@ -149,31 +149,42 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
-// API endpoint for all issues in next sprint
+// API endpoint for all issues in next sprint (from both BE and FE projects)
 app.get('/api/next-sprint', async (req, res) => {
   try {
-    console.log(`[API] Request: Next sprint issues`);
-    const result = await jiraClient.fetchNextSprintIssues();
+    console.log(`[API] Request: Next sprint issues (BE + FE)`);
+    const result = await jiraClient.fetchBothProjectsNextSprintIssues();
 
-    // Add team information to each issue based on labels
+    // Add team information to BE issues based on labels
     const { TEAMS } = require('./config');
     const teamLabels = Object.values(TEAMS).map(t => t.label);
 
-    result.issues.forEach(issue => {
+    result.beIssues.forEach(issue => {
       const labels = issue.fields.labels || [];
       const teamLabel = labels.find(l => teamLabels.includes(l));
       issue.team = teamLabel || null; // null means no team
     });
 
-    // Process data for table display (team info is included from issue.team)
-    const tableData = dataProcessor.prepareUnassignedTableData(result.issues);
+    // FE issues don't have team labels
+    result.feIssues.forEach(issue => {
+      issue.team = null;
+    });
 
-    console.log(`[API] Fetched ${result.issues.length} issues for next sprint`);
+    // Process data for table display
+    const beTableData = dataProcessor.prepareUnassignedTableData(result.beIssues);
+    const feTableData = dataProcessor.prepareUnassignedTableData(result.feIssues);
+
+    console.log(`[API] Fetched ${result.beIssues.length} BE issues and ${result.feIssues.length} FE issues for next sprint`);
 
     res.json({
-      issues: tableData,
-      nextVersion: result.nextVersion,
-      totalIssues: result.issues.length,
+      beIssues: beTableData,
+      feIssues: feTableData,
+      beNextVersion: result.beNextVersion,
+      feNextVersion: result.feNextVersion,
+      beCurrentVersion: result.beCurrentVersion,
+      feCurrentVersion: result.feCurrentVersion,
+      totalBeIssues: result.beIssues.length,
+      totalFeIssues: result.feIssues.length,
       teams: teamLabels
     });
   } catch (error) {

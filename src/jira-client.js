@@ -884,6 +884,121 @@ class JiraClient {
       currentVersion
     };
   }
+
+  /**
+   * Fetch ALL issues for the next sprint from FE project (SS)
+   * @returns {Promise<Object>} Object with issues array and nextVersion
+   */
+  async fetchFENextSprintIssues() {
+    const client = this.getAxiosInstance();
+
+    // Step 1: Do sprint analysis for FE project to determine current version
+    const sprintAnalysisJql = `project = "${FE_TEAM.project}" AND sprint is not EMPTY AND ${JQL_FILTERS.EXCLUDE_TYPES} ORDER BY updated DESC`;
+
+    console.log(`[Jira] Fetching FE issues for sprint analysis (next-sprint)`);
+    const response = await client.get('/rest/api/3/search/jql', {
+      params: {
+        jql: sprintAnalysisJql,
+        maxResults: '50',
+        fields: 'customfield_10000'
+      }
+    });
+
+    const analysisIssues = response.data.issues || [];
+    const sprintMap = this.extractSprintsFromIssues(analysisIssues);
+    const { versionMap, sortedVersions } = this.groupSprintsByVersion(sprintMap);
+
+    // Determine current version with 2-day extension
+    const currentVersion = this.determineCurrentVersion(versionMap, sortedVersions, 2);
+
+    if (!currentVersion) {
+      console.log(`[Jira] No FE sprints found`);
+      return {
+        issues: [],
+        nextVersion: null,
+        currentVersion: null
+      };
+    }
+
+    const nextVersion = this.getNextVersion(currentVersion);
+    console.log(`[Jira] FE current version: ${currentVersion}, next version: ${nextVersion.full}`);
+
+    // Get sprint IDs for next version
+    const nextVersionSprints = versionMap.get(nextVersion.full) || [];
+    if (nextVersionSprints.length === 0) {
+      console.log(`[Jira] No FE sprints found for version ${nextVersion.full}`);
+      return {
+        issues: [],
+        nextVersion: nextVersion.full,
+        currentVersion
+      };
+    }
+
+    const sprintIds = nextVersionSprints.map(s => s.id);
+    console.log(`[Jira] Found ${sprintIds.length} FE sprint(s) for version ${nextVersion.full}`);
+
+    // Fetch ALL issues in next sprint (no team filter for FE)
+    const nextSprintJql = `project = "${FE_TEAM.project}" AND sprint IN (${sprintIds.join(',')}) AND ${JQL_FILTERS.EXCLUDE_DONE_STATES} ORDER BY cf[11737] DESC, created DESC`;
+
+    console.log(`[Jira] Fetching FE next sprint issues`);
+    console.log(`[Jira] JQL: ${nextSprintJql}`);
+
+    // Fetch with required fields
+    const allIssues = [];
+    let nextPageToken = null;
+    let pageCount = 0;
+
+    do {
+      pageCount++;
+      const params = {
+        jql: nextSprintJql,
+        maxResults: '100',
+        fields: NEXT_SPRINT_REQUIRED_FIELDS
+      };
+      if (nextPageToken) {
+        params.nextPageToken = nextPageToken;
+      }
+
+      const fetchResponse = await client.get('/rest/api/3/search/jql', { params });
+      const pageIssues = fetchResponse.data.issues || [];
+      allIssues.push(...pageIssues);
+
+      nextPageToken = fetchResponse.data.nextPageToken;
+      console.log(`[Jira] FE Page ${pageCount}: ${pageIssues.length} issues`);
+
+      if (!nextPageToken || fetchResponse.data.isLast) {
+        break;
+      }
+    } while (pageCount < 10);
+
+    console.log(`[Jira] Fetched ${allIssues.length} FE issues for next sprint`);
+
+    return {
+      issues: allIssues,
+      nextVersion: nextVersion.full,
+      currentVersion
+    };
+  }
+
+  /**
+   * Fetch next sprint issues from both BE and FE projects in parallel
+   * @returns {Promise<Object>} Combined result with beIssues, feIssues, and version info
+   */
+  async fetchBothProjectsNextSprintIssues() {
+    const [beResult, feResult] = await Promise.all([
+      this.fetchNextSprintIssues(),
+      this.fetchFENextSprintIssues()
+    ]);
+
+    return {
+      beIssues: beResult.issues,
+      feIssues: feResult.issues,
+      beNextVersion: beResult.nextVersion,
+      feNextVersion: feResult.nextVersion,
+      beCurrentVersion: beResult.currentVersion,
+      feCurrentVersion: feResult.currentVersion
+    };
+  }
 }
 
 // Export class (not singleton for better testability)

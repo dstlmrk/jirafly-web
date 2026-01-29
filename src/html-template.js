@@ -869,10 +869,23 @@ function generateHTML(options) {
         updateModeButton();
         updateTeamButtonVisibility();
 
-        // Load history data if not cached
-        if (!allData) {
+        // Get cached data for current mode
+        const cachedData = currentMode === 'be' ? beDataCache : feDataCache;
+
+        // Load history data if not cached for current mode
+        if (!cachedData) {
           loadData();
         } else {
+          // Use mode-specific cache
+          allData = cachedData;
+
+          // Update available teams from cached data
+          if (allData.teams && allData.teams.length > 0) {
+            availableTeams = ['All', ...allData.teams];
+          } else {
+            availableTeams = ['All'];
+          }
+
           // Show cached data - always re-render with current team (may have changed)
           const teamData = getDataForTeam(currentTeam);
           renderCharts(teamData);
@@ -899,12 +912,13 @@ function generateHTML(options) {
           }
         }
       } else if (currentPage === 'next-sprint') {
-        // Show mode toggle but disabled on next-sprint page, show team toggle
+        // Show and enable mode toggle on next-sprint page
         const modeToggle = document.getElementById('modeToggle');
         modeToggle.style.display = '';
-        modeToggle.disabled = true;
-        modeToggle.textContent = 'BE';
-        document.getElementById('teamToggle').style.display = '';
+        modeToggle.disabled = false;
+        modeToggle.textContent = currentMode.toUpperCase();
+        // Show team toggle only in BE mode
+        document.getElementById('teamToggle').style.display = currentMode === 'be' ? '' : 'none';
 
         // Load next-sprint data if not cached
         if (!nextSprintData) {
@@ -971,17 +985,27 @@ function generateHTML(options) {
 
     function updateNextSprintStatus() {
       const statusEl = document.getElementById('status');
-      statusEl.textContent = \`Loaded \${nextSprintData.totalIssues} tasks for sprint \${nextSprintData.nextVersion}\`;
+      const total = nextSprintData.totalBeIssues + nextSprintData.totalFeIssues;
+      const version = currentMode === 'fe'
+        ? nextSprintData.feNextVersion
+        : nextSprintData.beNextVersion;
+      statusEl.textContent = \`Loaded \${total} tasks for next sprint \${version}\`;
     }
 
     function getNextSprintDataForTeam(team) {
       if (!nextSprintData) return [];
 
-      if (team === 'NoTeam') {
-        return nextSprintData.issues.filter(issue => !issue.team);
+      // FE mode: return all FE issues (no team filtering)
+      if (currentMode === 'fe') {
+        return nextSprintData.feIssues || [];
       }
 
-      return nextSprintData.issues.filter(issue => issue.team === team);
+      // BE mode: filter by team
+      if (team === 'NoTeam') {
+        return (nextSprintData.beIssues || []).filter(issue => !issue.team);
+      }
+
+      return (nextSprintData.beIssues || []).filter(issue => issue.team === team);
     }
 
     function updateNextSprintTeamButton(team) {
@@ -1041,9 +1065,14 @@ function generateHTML(options) {
       const tbody = document.getElementById('unassignedTableBody');
       tbody.innerHTML = '';
 
-      const teamLabel = currentNextSprintTeam === 'NoTeam' ? 'Without Team' : currentNextSprintTeam.replace(/^Team/, '') + ' Team';
-      document.getElementById('unassignedTableTitle').textContent =
-        \`Tasks \${teamLabel} (\${tableData.length})\`;
+      let tableTitle;
+      if (currentMode === 'fe') {
+        tableTitle = \`FE Tasks (\${tableData.length})\`;
+      } else {
+        const teamLabel = currentNextSprintTeam === 'NoTeam' ? 'Without Team' : currentNextSprintTeam.replace(/^Team/, '') + ' Team';
+        tableTitle = \`Tasks \${teamLabel} (\${tableData.length})\`;
+      }
+      document.getElementById('unassignedTableTitle').textContent = tableTitle;
 
       let prevAssignee = null;
       tableData.forEach(row => {
@@ -1376,6 +1405,9 @@ function generateHTML(options) {
       // Toggle between BE and FE
       currentMode = currentMode === 'be' ? 'fe' : 'be';
 
+      // Clear team selection from sessionStorage when switching modes
+      sessionStorage.removeItem('jirafly-selected-team');
+
       // Update URL with mode parameter
       const params = new URLSearchParams(window.location.search);
       if (currentMode === 'be') {
@@ -1391,6 +1423,28 @@ function generateHTML(options) {
       window.history.pushState({}, '', newUrl);
 
       updateModeButton();
+
+      // Handle next-sprint page toggle
+      if (currentPage === 'next-sprint') {
+        // Update team toggle visibility (hide in FE mode)
+        document.getElementById('teamToggle').style.display = currentMode === 'be' ? '' : 'none';
+
+        // Reset team selection
+        currentNextSprintTeam = 'NoTeam';
+        updateNextSprintTeamButton(currentNextSprintTeam);
+
+        // Update status with current mode's version
+        updateNextSprintStatus();
+
+        // Re-render table with correct data
+        const filteredData = getNextSprintDataForTeam(currentNextSprintTeam);
+        renderNextSprintTable(filteredData);
+
+        // Charts don't need to be re-rendered (they always show all data)
+        return;
+      }
+
+      // History page mode toggle logic
       updateTeamButtonVisibility();
 
       // Check if we have cached data for this mode
@@ -1643,21 +1697,21 @@ function generateHTML(options) {
     }
 
     function renderNextSprintCharts() {
-      if (!nextSprintData || !nextSprintData.issues) return;
+      if (!nextSprintData || !nextSprintData.beIssues) return;
 
       // Group data by team (exclude No Team from charts)
       const categories = ['Excluded', 'Maintenance', 'Bug', 'Product'];
       const teams = nextSprintData.teams || [];
       const teamNames = teams.map(t => t.replace(/^Team/, ''));
 
-      // Calculate HLE by team and category
+      // Calculate HLE by team and category (BE teams)
       const hleByTeam = {};
       teamNames.forEach(team => {
         hleByTeam[team] = {};
         categories.forEach(cat => hleByTeam[team][cat] = 0);
       });
 
-      nextSprintData.issues.forEach(issue => {
+      (nextSprintData.beIssues || []).forEach(issue => {
         if (!issue.team) return; // Skip issues without team
         if (issue.issueType === 'Epic') return; // Skip Epics
         const teamKey = issue.team.replace(/^Team/, '');
@@ -1666,6 +1720,14 @@ function generateHTML(options) {
         if (hleByTeam[teamKey]) {
           hleByTeam[teamKey][category] = (hleByTeam[teamKey][category] || 0) + hle;
         }
+      });
+
+      // Calculate FE HLE by category
+      const feHle = { Excluded: 0, Maintenance: 0, Bug: 0, Product: 0 };
+      (nextSprintData.feIssues || []).forEach(issue => {
+        if (issue.issueType === 'Epic') return; // Skip Epics
+        const category = issue.category || 'Product';
+        feHle[category] = (feHle[category] || 0) + (issue.hle || 0);
       });
 
       // Prepare percentage data (exclude Excluded from 100%)
@@ -1681,29 +1743,39 @@ function generateHTML(options) {
         });
       });
 
-      // Add averages
+      // Add BE averages
       percentageCategories.forEach(cat => {
         const sum = percentageData[cat].reduce((acc, val) => acc + val, 0);
         percentageData[cat].push(sum / percentageData[cat].length);
+      });
+
+      // Add FE percentages
+      const feTotal = percentageCategories.reduce((sum, cat) => sum + (feHle[cat] || 0), 0);
+      percentageCategories.forEach(cat => {
+        const fePerc = feTotal > 0 ? Math.round((feHle[cat] || 0) / feTotal * 1000) / 10 : 0;
+        percentageData[cat].push(fePerc);
       });
 
       // Prepare HLE data
       const hleData = {};
       categories.forEach(cat => {
         hleData[cat] = teamNames.map(team => hleByTeam[team][cat] || 0);
+        // Add BE average
         const avg = hleData[cat].reduce((sum, val) => sum + val, 0) / hleData[cat].length;
         hleData[cat].push(Math.round(avg * 100) / 100);
+        // Add FE value
+        hleData[cat].push(feHle[cat] || 0);
       });
 
       // Destroy old charts
       if (nextSprintPercentageChart) nextSprintPercentageChart.destroy();
       if (nextSprintHleChart) nextSprintHleChart.destroy();
 
-      const teamsWithAverage = [...teamNames, 'Average'];
+      const chartLabels = [...teamNames, 'BE Avg', 'FE Team'];
 
       const percentageCtx = document.getElementById('nextSprintPercentageChart').getContext('2d');
       nextSprintPercentageChart = new Chart(percentageCtx, buildChartConfig(
-        teamsWithAverage, percentageCategories, percentageData,
+        chartLabels, percentageCategories, percentageData,
         {
           min: 0,
           max: 100,
@@ -1715,7 +1787,7 @@ function generateHTML(options) {
 
       const hleCtx = document.getElementById('nextSprintHleChart').getContext('2d');
       nextSprintHleChart = new Chart(hleCtx, buildChartConfig(
-        teamsWithAverage, categories, hleData,
+        chartLabels, categories, hleData,
         {
           beginAtZero: true,
           title: { display: true, text: 'HLE Value', font: { family: 'JetBrains Mono', size: 11 } }
@@ -1962,15 +2034,16 @@ function generateHTML(options) {
       if (currentPage === 'history') {
         loadData();
       } else if (currentPage === 'next-sprint') {
-        // Show mode toggle but disabled on next-sprint page
+        // Enable mode toggle on next-sprint page
         const modeToggle = document.getElementById('modeToggle');
-        modeToggle.disabled = true;
-        modeToggle.textContent = 'BE';
+        modeToggle.disabled = false;
+        modeToggle.textContent = currentMode.toUpperCase();
         loadNextSprintData();
-        // Initialize team toggle for next-sprint page
+        // Initialize team toggle for next-sprint page (show only in BE mode)
         const teamButton = document.getElementById('teamToggle');
         teamButton.disabled = true; // Will be enabled after data loads
         teamButton.textContent = 'No team';
+        teamButton.style.display = currentMode === 'be' ? '' : 'none';
       }
     });
   </script>

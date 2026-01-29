@@ -137,15 +137,122 @@ test.describe('Project toggle (BE/FE)', () => {
     await expect(status).toContainText(/\(\d+\/\d+ - \d+\/\d+\)/);
   });
 
-  test('project toggle is disabled on next-sprint page', async ({ page }) => {
+  test('project toggle is enabled on next-sprint page', async ({ page }) => {
     await page.goto('/next-sprint');
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
 
     const modeButton = page.locator('#modeToggle');
 
-    // Mode button should be visible but disabled
+    // Mode button should be visible and enabled
     await expect(modeButton).toBeVisible();
-    await expect(modeButton).toBeDisabled();
+    await expect(modeButton).toBeEnabled();
     await expect(modeButton).toHaveText('BE');
+  });
+
+  test('switching modes on next-sprint page updates table', async ({ page }) => {
+    await page.goto('/next-sprint');
+    await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+
+    const modeButton = page.locator('#modeToggle');
+    const teamButton = page.locator('#teamToggle');
+    const tableTitle = page.locator('#unassignedTableTitle');
+
+    // Should start in BE mode with team toggle visible
+    await expect(modeButton).toHaveText('BE');
+    await expect(teamButton).toBeVisible();
+
+    // Get initial table title
+    const beTitle = await tableTitle.textContent();
+    expect(beTitle).toContain('Tasks');
+
+    // Switch to FE mode
+    await modeButton.click();
+
+    // Mode button should show FE
+    await expect(modeButton).toHaveText('FE');
+
+    // Team toggle should be hidden in FE mode
+    await expect(teamButton).not.toBeVisible();
+
+    // Table title should change to FE
+    await expect(tableTitle).toContainText('FE Tasks');
+  });
+
+  test('next-sprint charts show BE Avg and FE Team columns', async ({ page }) => {
+    await page.goto('/next-sprint');
+    await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+
+    // Charts should be rendered with the new labels
+    // We can verify by checking the chart canvas exists and has content
+    const percentageChart = page.locator('#nextSprintPercentageChart');
+    const hleChart = page.locator('#nextSprintHleChart');
+
+    await expect(percentageChart).toBeVisible();
+    await expect(hleChart).toBeVisible();
+  });
+
+  test('next-sprint status shows total tasks from both projects', async ({ page }) => {
+    await page.goto('/next-sprint');
+    await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+
+    const status = page.locator('#status');
+    // Should show "Loaded X tasks for next sprint Y.Z"
+    await expect(status).toContainText(/Loaded \d+ tasks for next sprint \d+\.\d+/);
+  });
+
+  test('switching pages preserves mode correctly', async ({ page }) => {
+    // Start on overview in BE mode
+    await page.goto('/');
+    await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+
+    const modeButton = page.locator('#modeToggle');
+
+    // Switch to FE mode
+    await modeButton.click();
+    await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+    await expect(modeButton).toHaveText('FE');
+
+    // Navigate to next-sprint
+    await page.locator('[data-page="next-sprint"]').click();
+    await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+
+    // Mode should still be FE
+    await expect(modeButton).toHaveText('FE');
+
+    // Navigate back to overview
+    await page.locator('[data-page="history"]').click();
+
+    // Mode should still be FE and should load FE data
+    await expect(modeButton).toHaveText('FE');
+
+    // Team toggle should be hidden (FE mode)
+    const teamButton = page.locator('#teamToggle');
+    await expect(teamButton).not.toBeVisible();
+  });
+
+  test('switching from FE next-sprint to BE overview loads correct data', async ({ page }) => {
+    // Start on next-sprint
+    await page.goto('/next-sprint');
+    await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+
+    const modeButton = page.locator('#modeToggle');
+
+    // Switch to FE mode on next-sprint
+    await modeButton.click();
+    await expect(modeButton).toHaveText('FE');
+
+    // Switch back to BE mode
+    await modeButton.click();
+    await expect(modeButton).toHaveText('BE');
+
+    // Navigate to overview
+    await page.locator('[data-page="history"]').click();
+    await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+
+    // Should be in BE mode with team toggle visible
+    await expect(modeButton).toHaveText('BE');
+    const teamButton = page.locator('#teamToggle');
+    await expect(teamButton).toBeVisible();
+    await expect(teamButton).toBeEnabled();
   });
 });

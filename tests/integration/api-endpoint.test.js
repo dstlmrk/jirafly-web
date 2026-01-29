@@ -48,6 +48,41 @@ function createTestServer() {
   const app = express();
   const jiraClient = new JiraClient();
 
+  app.get('/api/next-sprint', async (req, res) => {
+    try {
+      const result = await jiraClient.fetchBothProjectsNextSprintIssues();
+
+      const teamLabels = Object.values(TEAMS).map(t => t.label);
+
+      result.beIssues.forEach(issue => {
+        const labels = issue.fields.labels || [];
+        const teamLabel = labels.find(l => teamLabels.includes(l));
+        issue.team = teamLabel || null;
+      });
+
+      result.feIssues.forEach(issue => {
+        issue.team = null;
+      });
+
+      const beTableData = dataProcessor.prepareUnassignedTableData(result.beIssues);
+      const feTableData = dataProcessor.prepareUnassignedTableData(result.feIssues);
+
+      res.json({
+        beIssues: beTableData,
+        feIssues: feTableData,
+        beNextVersion: result.beNextVersion,
+        feNextVersion: result.feNextVersion,
+        beCurrentVersion: result.beCurrentVersion,
+        feCurrentVersion: result.feCurrentVersion,
+        totalBeIssues: result.beIssues.length,
+        totalFeIssues: result.feIssues.length,
+        teams: teamLabels
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get('/api/data', async (req, res) => {
     try {
       const groupBy = req.query.group_by || 'sprint';
@@ -337,6 +372,61 @@ async function runTests() {
     test('Table row has issueType', () => {
       assertTrue(tableRow.issueType !== undefined, 'Should have issueType');
     });
+
+    // ============================================================
+    // TEST 6: Next Sprint API Response
+    // ============================================================
+    console.log('\n🚀 Test 6: Next Sprint API Response\n');
+
+    const nextSprintResponse = await makeRequest(server, '/api/next-sprint');
+
+    test('Next sprint returns 200 status', () => {
+      assertEqual(nextSprintResponse.status, 200, 'Status code');
+    });
+
+    test('Next sprint contains beIssues array', () => {
+      assertTrue(Array.isArray(nextSprintResponse.data.beIssues), 'beIssues should be an array');
+    });
+
+    test('Next sprint contains feIssues array', () => {
+      assertTrue(Array.isArray(nextSprintResponse.data.feIssues), 'feIssues should be an array');
+    });
+
+    test('Next sprint contains version info', () => {
+      assertTrue(nextSprintResponse.data.beNextVersion !== undefined, 'Should have beNextVersion');
+      assertTrue(nextSprintResponse.data.feNextVersion !== undefined, 'Should have feNextVersion');
+      assertTrue(nextSprintResponse.data.beCurrentVersion !== undefined, 'Should have beCurrentVersion');
+      assertTrue(nextSprintResponse.data.feCurrentVersion !== undefined, 'Should have feCurrentVersion');
+    });
+
+    test('Next sprint contains issue counts', () => {
+      assertTrue(typeof nextSprintResponse.data.totalBeIssues === 'number', 'totalBeIssues should be a number');
+      assertTrue(typeof nextSprintResponse.data.totalFeIssues === 'number', 'totalFeIssues should be a number');
+    });
+
+    test('Next sprint contains teams array', () => {
+      assertTrue(Array.isArray(nextSprintResponse.data.teams), 'teams should be an array');
+      assertTrue(nextSprintResponse.data.teams.length > 0, 'Should have at least one team');
+    });
+
+    test('BE issues have team property', () => {
+      if (nextSprintResponse.data.beIssues.length > 0) {
+        const firstIssue = nextSprintResponse.data.beIssues[0];
+        assertTrue(firstIssue.team !== undefined, 'BE issue should have team property');
+      }
+    });
+
+    test('FE issues have null team', () => {
+      if (nextSprintResponse.data.feIssues.length > 0) {
+        const firstIssue = nextSprintResponse.data.feIssues[0];
+        assertTrue(firstIssue.team === null, 'FE issue should have null team');
+      }
+    });
+
+    console.log(`\n   BE issues: ${nextSprintResponse.data.totalBeIssues}`);
+    console.log(`   FE issues: ${nextSprintResponse.data.totalFeIssues}`);
+    console.log(`   BE next version: ${nextSprintResponse.data.beNextVersion}`);
+    console.log(`   FE next version: ${nextSprintResponse.data.feNextVersion}`);
 
     // ============================================================
     // SUMMARY

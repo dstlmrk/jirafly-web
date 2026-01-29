@@ -140,4 +140,47 @@ test.describe.serial('Next Sprint page', () => {
     const href = await firstLink.getAttribute('href');
     expect(href).toMatch(/\/browse\/[A-Z]+-\d+/);
   });
+
+  // === BE/FE mode toggle ===
+
+  test('mode toggle is enabled and shows BE by default', async () => {
+    const modeButton = page.locator('#modeToggle');
+    await expect(modeButton).toBeVisible();
+    await expect(modeButton).toBeEnabled();
+    await expect(modeButton).toHaveText('BE');
+  });
+
+  test('switching to FE mode hides team toggle', async () => {
+    const modeButton = page.locator('#modeToggle');
+    const teamButton = page.locator('#teamToggle');
+
+    // Team toggle should be visible in BE mode
+    await expect(teamButton).toBeVisible();
+
+    // Switch to FE
+    await modeButton.click();
+    await expect(modeButton).toHaveText('FE');
+
+    // Team toggle should be hidden
+    await expect(teamButton).not.toBeVisible();
+
+    // Switch back to BE for other tests
+    await modeButton.click();
+    await expect(modeButton).toHaveText('BE');
+    await expect(teamButton).toBeVisible();
+  });
+
+  test('FE mode shows FE Tasks in table title', async () => {
+    const modeButton = page.locator('#modeToggle');
+    const tableTitle = page.locator('#unassignedTableTitle');
+
+    // Switch to FE
+    await modeButton.click();
+    await expect(tableTitle).toContainText('FE Tasks');
+
+    // Switch back to BE
+    await modeButton.click();
+    await expect(tableTitle).toContainText('Tasks');
+    await expect(tableTitle).not.toContainText('FE Tasks');
+  });
 });

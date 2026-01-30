@@ -20,7 +20,7 @@ test.describe.serial('Overview page', () => {
 
   test('status bar shows loaded tasks', async () => {
     const status = page.locator('#status');
-    await expect(status).toContainText(/Loaded \d+ tasks from \d+ sprints/);
+    await expect(status).toContainText(/Loaded \d+ tasks from the last \d+ sprints/);
   });
 
   test('percentage chart is visible', async () => {

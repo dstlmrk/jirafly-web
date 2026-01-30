@@ -137,8 +137,8 @@ test.describe('Project toggle (BE/FE)', () => {
     await expect(status).toContainText(/\(\d+\/\d+ - \d+\/\d+\)/);
   });
 
-  test('project toggle is enabled on next-sprint page', async ({ page }) => {
-    await page.goto('/next-sprint');
+  test('project toggle is enabled on planning page', async ({ page }) => {
+    await page.goto('/planning');
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
 
     const modeButton = page.locator('#modeToggle');
@@ -149,8 +149,8 @@ test.describe('Project toggle (BE/FE)', () => {
     await expect(modeButton).toHaveText('BE');
   });
 
-  test('switching modes on next-sprint page updates table', async ({ page }) => {
-    await page.goto('/next-sprint');
+  test('switching modes on planning page updates table', async ({ page }) => {
+    await page.goto('/planning');
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
 
     const modeButton = page.locator('#modeToggle');
@@ -178,8 +178,8 @@ test.describe('Project toggle (BE/FE)', () => {
     await expect(tableTitle).toContainText('FE Tasks');
   });
 
-  test('next-sprint charts show BE Avg and FE Team columns', async ({ page }) => {
-    await page.goto('/next-sprint');
+  test('planning charts show BE Avg and FE Team columns', async ({ page }) => {
+    await page.goto('/planning');
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
 
     // Charts should be rendered with the new labels
@@ -191,13 +191,13 @@ test.describe('Project toggle (BE/FE)', () => {
     await expect(hleChart).toBeVisible();
   });
 
-  test('next-sprint status shows total tasks from both projects', async ({ page }) => {
-    await page.goto('/next-sprint');
+  test('planning status shows total tasks from both projects', async ({ page }) => {
+    await page.goto('/planning');
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
 
     const status = page.locator('#status');
-    // Should show "Loaded X tasks for next sprint Y.Z"
-    await expect(status).toContainText(/Loaded \d+ tasks for next sprint \d+\.\d+/);
+    // Should show "Loaded X tasks for sprint Y.Z"
+    await expect(status).toContainText(/Loaded \d+ tasks for sprint \d+\.\d+/);
   });
 
   test('switching pages preserves mode correctly', async ({ page }) => {
@@ -212,8 +212,8 @@ test.describe('Project toggle (BE/FE)', () => {
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
     await expect(modeButton).toHaveText('FE');
 
-    // Navigate to next-sprint
-    await page.locator('[data-page="next-sprint"]').click();
+    // Navigate to planning
+    await page.locator('[data-page="planning"]').click();
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
 
     // Mode should still be FE
@@ -230,14 +230,14 @@ test.describe('Project toggle (BE/FE)', () => {
     await expect(teamButton).not.toBeVisible();
   });
 
-  test('switching from FE next-sprint to BE overview loads correct data', async ({ page }) => {
-    // Start on next-sprint
-    await page.goto('/next-sprint');
+  test('switching from FE planning to BE overview loads correct data', async ({ page }) => {
+    // Start on planning
+    await page.goto('/planning');
     await page.waitForSelector('#status:not(.loading)', { timeout: 60000 });
 
     const modeButton = page.locator('#modeToggle');
 
-    // Switch to FE mode on next-sprint
+    // Switch to FE mode on planning
     await modeButton.click();
     await expect(modeButton).toHaveText('FE');
 

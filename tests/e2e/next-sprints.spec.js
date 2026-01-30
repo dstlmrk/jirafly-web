@@ -100,17 +100,17 @@ test.describe.serial('Future Sprints page', () => {
     const tableTitle = page.locator('#futureSprintsTableTitle');
 
     // Check initial BE state
-    await expect(tableTitle).toContainText('BE Tasks');
+    await expect(tableTitle).toContainText('BE Future Sprints Tasks');
 
     // Switch to FE
     await modeButton.click();
     await expect(modeButton).toHaveText('FE');
-    await expect(tableTitle).toContainText('FE Tasks');
+    await expect(tableTitle).toContainText('FE Future Sprints Tasks');
 
     // Switch back to BE
     await modeButton.click();
     await expect(modeButton).toHaveText('BE');
-    await expect(tableTitle).toContainText('BE Tasks');
+    await expect(tableTitle).toContainText('BE Future Sprints Tasks');
   });
 
   // === Tab navigation ===
@@ -147,17 +147,17 @@ test.describe.serial('Future Sprints page', () => {
     const themeToggle = page.locator('#themeToggle');
     const body = page.locator('body');
 
-    // Get initial state
-    const initialClass = await body.getAttribute('class');
+    // Get initial state (normalize null to empty string)
+    const initialClass = (await body.getAttribute('class')) || '';
 
     // Toggle theme
     await themeToggle.click();
-    const newClass = await body.getAttribute('class');
+    const newClass = (await body.getAttribute('class')) || '';
     expect(newClass).not.toBe(initialClass);
 
     // Toggle back
     await themeToggle.click();
-    const finalClass = await body.getAttribute('class');
+    const finalClass = (await body.getAttribute('class')) || '';
     expect(finalClass).toBe(initialClass);
   });
 });

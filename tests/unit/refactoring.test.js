@@ -92,7 +92,7 @@ try {
   console.log('✅ Contains CSS:', html.includes('body {') ? 'OK' : 'FAIL');
   console.log('✅ Contains Chart.js:', html.includes('chart.js') ? 'OK' : 'FAIL');
   console.log('✅ Contains buildChartConfig:', html.includes('buildChartConfig') ? 'OK' : 'FAIL');
-  console.log('✅ Uses config colors:', html.includes('#4caf50') ? 'OK' : 'FAIL');
+  console.log('✅ Uses config colors:', html.includes('#86efac') ? 'OK' : 'FAIL');
   console.log('   HTML size:', html.length, 'characters');
 } catch (e) {
   console.log('❌ HTML generation failed:', e.message);

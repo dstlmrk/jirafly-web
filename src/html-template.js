@@ -1020,6 +1020,10 @@ function generateHTML(options) {
 
         // Load history data if not cached for current mode
         if (!cachedData) {
+          // Clear and disable assignee filter while loading
+          const assigneeFilter = document.getElementById('overviewAssigneeFilter');
+          assigneeFilter.innerHTML = '<option value="">All members</option>';
+          assigneeFilter.disabled = true;
           loadData();
         } else {
           // Use mode-specific cache
@@ -2242,6 +2246,9 @@ function generateHTML(options) {
       const { team, sprintCount } = getURLParams();
       const statusEl = document.getElementById('status');
 
+      // Capture the mode at request start to detect if user switches during loading
+      const requestedMode = currentMode;
+
       updateModeButton();
       updateTeamButtonVisibility();
 
@@ -2270,20 +2277,20 @@ function generateHTML(options) {
 
         const data = await response.json();
 
-        // Store all data for client-side filtering
-        allData = data;
-
-        // Cache data for this mode
-        if (currentMode === 'be') {
+        // Cache data for the mode that was requested (not current, which may have changed)
+        if (requestedMode === 'be') {
           beDataCache = data;
         } else {
           feDataCache = data;
         }
 
-        // Check if user switched to different page during loading
-        if (currentPage !== 'history') {
+        // Check if user switched to different page or mode during loading
+        if (currentPage !== 'history' || currentMode !== requestedMode) {
           return;
         }
+
+        // Store all data for client-side filtering (only if mode hasn't changed)
+        allData = data;
 
         // Set available teams (empty for FE mode)
         if (data.teams && data.teams.length > 0) {

@@ -785,6 +785,12 @@ function generateHTML(options) {
         <select id="overviewAssigneeFilter" class="header-filter" disabled>
           <option value="">All members</option>
         </select>
+        <select id="planningAssigneeFilter" class="header-filter" disabled>
+          <option value="">All members</option>
+        </select>
+        <select id="futureSprintsAssigneeFilter" class="header-filter" disabled>
+          <option value="">All members</option>
+        </select>
         <button id="themeToggle" class="theme-toggle" title="Toggle dark mode">
           <svg id="moonIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
@@ -850,12 +856,6 @@ function generateHTML(options) {
       <div class="table-header-row">
         <div class="table-title" id="unassignedTableTitle">Tasks Without Team</div>
         <div class="table-header-controls">
-          <div class="assignee-filter">
-            <label for="planningAssigneeFilter">Assignee:</label>
-            <select id="planningAssigneeFilter">
-              <option value="">All members</option>
-            </select>
-          </div>
           <label class="toggle-label">
             <input type="checkbox" id="hleToggle" checked>
             <span class="toggle-switch"></span>
@@ -892,15 +892,7 @@ function generateHTML(options) {
     </div>
 
     <div class="table-wrapper" id="futureSprintsTableWrapper" style="display: none;">
-      <div class="table-header-row">
-        <div class="table-title" id="futureSprintsTableTitle">Future Sprints Tasks</div>
-        <div class="assignee-filter">
-          <label for="futureSprintsAssigneeFilter">Assignee:</label>
-          <select id="futureSprintsAssigneeFilter">
-            <option value="">All members</option>
-          </select>
-        </div>
-      </div>
+      <div class="table-title" id="futureSprintsTableTitle">Future Sprints Tasks</div>
       <div id="futureSprintsTableContainer"></div>
     </div>
 
@@ -1014,6 +1006,9 @@ function generateHTML(options) {
         updateModeButton();
         updateTeamButtonVisibility();
         updateOverviewAssigneeFilterVisibility();
+        // Hide planning and future sprints assignee filters on history page
+        document.getElementById('planningAssigneeFilter').style.display = 'none';
+        document.getElementById('futureSprintsAssigneeFilter').style.display = 'none';
 
         // Get cached data for current mode
         const cachedData = currentMode === 'be' ? beDataCache : feDataCache;
@@ -1076,11 +1071,17 @@ function generateHTML(options) {
           teamSelect.disabled = true;
         }
         teamSelect.style.display = '';
-        // Hide overview assignee filter
+        // Hide overview and future sprints assignee filters, show planning filter
         document.getElementById('overviewAssigneeFilter').style.display = 'none';
+        document.getElementById('futureSprintsAssigneeFilter').style.display = 'none';
+        document.getElementById('planningAssigneeFilter').style.display = '';
 
         // Load next-sprint data if not cached
         if (!nextSprintData) {
+          // Clear and disable assignee filter while loading
+          const assigneeFilter = document.getElementById('planningAssigneeFilter');
+          assigneeFilter.innerHTML = '<option value="">All members</option>';
+          assigneeFilter.disabled = true;
           loadNextSprintData();
         } else {
           // Show cached data - always re-render with current team (may have changed)
@@ -1090,6 +1091,8 @@ function generateHTML(options) {
           nextSprintChartsContainer.style.display = 'grid';
           nextSprintTableWrapper.style.display = 'block';
           updateNextSprintStatus();
+          // Enable assignee filter (renderNextSprintTable already populated it)
+          document.getElementById('planningAssigneeFilter').disabled = false;
         }
       } else if (currentPage === 'next-sprints') {
         // Show and enable mode toggle on future sprints page
@@ -1102,11 +1105,17 @@ function generateHTML(options) {
         teamSelect.innerHTML = '<option value="All">All teams</option>';
         teamSelect.disabled = true;
         teamSelect.style.display = '';
-        // Hide overview assignee filter
+        // Hide overview and planning assignee filters, show future sprints filter
         document.getElementById('overviewAssigneeFilter').style.display = 'none';
+        document.getElementById('planningAssigneeFilter').style.display = 'none';
+        document.getElementById('futureSprintsAssigneeFilter').style.display = '';
 
         // Load future sprints data if not cached
         if (!futureSprintsData) {
+          // Clear and disable assignee filter while loading
+          const assigneeFilter = document.getElementById('futureSprintsAssigneeFilter');
+          assigneeFilter.innerHTML = '<option value="">All members</option>';
+          assigneeFilter.disabled = true;
           loadFutureSprintsData();
         } else {
           // Use cached data - just re-render for current mode
@@ -1116,6 +1125,8 @@ function generateHTML(options) {
           futureSprintsChartsContainer.style.display = 'grid';
           futureSprintsTableWrapper.style.display = 'block';
           updateFutureSprintsStatus();
+          // Enable assignee filter (renderFutureSprintsTable already populated it)
+          document.getElementById('futureSprintsAssigneeFilter').disabled = false;
         }
       }
     }
@@ -1217,6 +1228,9 @@ function generateHTML(options) {
 
         // Enable team toggle button (only in BE mode)
         document.getElementById('teamToggle').disabled = currentMode === 'fe';
+
+        // Enable assignee filter
+        document.getElementById('planningAssigneeFilter').disabled = false;
       } catch (error) {
         statusEl.className = 'error';
         statusEl.textContent = \`Error: \${error.message}\`;
@@ -1482,6 +1496,9 @@ function generateHTML(options) {
         renderFutureSprintsTable(tableData);
         document.getElementById('futureSprintsChartsContainer').style.display = 'grid';
         document.getElementById('futureSprintsTableWrapper').style.display = 'block';
+
+        // Enable assignee filter
+        document.getElementById('futureSprintsAssigneeFilter').disabled = false;
       } catch (error) {
         statusEl.className = 'error';
         statusEl.textContent = \`Error: \${error.message}\`;
@@ -2045,6 +2062,10 @@ function generateHTML(options) {
 
       // Handle planning page toggle
       if (currentPage === 'planning') {
+        // Clear assignee filter options before re-render to prevent flash of old values
+        const assigneeFilter = document.getElementById('planningAssigneeFilter');
+        assigneeFilter.innerHTML = '<option value="">All members</option>';
+
         // In FE mode, show disabled team toggle with "No team"
         const teamSelect = document.getElementById('teamToggle');
         if (currentMode === 'fe') {
@@ -2072,6 +2093,10 @@ function generateHTML(options) {
 
       // Handle future sprints page toggle
       if (currentPage === 'next-sprints') {
+        // Clear assignee filter options before re-render to prevent flash of old values
+        const assigneeFilter = document.getElementById('futureSprintsAssigneeFilter');
+        assigneeFilter.innerHTML = '<option value="">All members</option>';
+
         // Data already loaded for both modes - just re-render
         if (futureSprintsData) {
           renderFutureSprintsCharts();
@@ -2752,6 +2777,9 @@ function generateHTML(options) {
 
       // Load appropriate data based on current page
       if (currentPage === 'history') {
+        // Hide planning and future sprints assignee filters
+        document.getElementById('planningAssigneeFilter').style.display = 'none';
+        document.getElementById('futureSprintsAssigneeFilter').style.display = 'none';
         loadData();
       } else if (currentPage === 'planning') {
         // Enable mode toggle on planning page
@@ -2764,8 +2792,11 @@ function generateHTML(options) {
         teamSelect.innerHTML = '<option value="NoTeam">No team</option>';
         teamSelect.disabled = true; // Will be enabled after data loads (only in BE mode)
         teamSelect.style.display = '';
-        // Hide overview assignee filter
+        // Hide overview and future sprints assignee filters, show planning filter (disabled)
         document.getElementById('overviewAssigneeFilter').style.display = 'none';
+        document.getElementById('planningAssigneeFilter').style.display = '';
+        document.getElementById('planningAssigneeFilter').disabled = true;
+        document.getElementById('futureSprintsAssigneeFilter').style.display = 'none';
       } else if (currentPage === 'next-sprints') {
         // Enable mode toggle on future sprints page
         const modeToggle = document.getElementById('modeToggle');
@@ -2777,8 +2808,11 @@ function generateHTML(options) {
         teamSelect.innerHTML = '<option value="All">All teams</option>';
         teamSelect.disabled = true;
         teamSelect.style.display = '';
-        // Hide overview assignee filter
+        // Hide overview and planning assignee filters, show future sprints filter (disabled)
         document.getElementById('overviewAssigneeFilter').style.display = 'none';
+        document.getElementById('planningAssigneeFilter').style.display = 'none';
+        document.getElementById('futureSprintsAssigneeFilter').style.display = '';
+        document.getElementById('futureSprintsAssigneeFilter').disabled = true;
       }
     });
   </script>

@@ -112,6 +112,53 @@ test.describe.serial('Planning page', () => {
     expect(false).toBe(true);
   });
 
+  test('team toggle updates URL with team parameter', async () => {
+    const button = page.locator('#teamToggle');
+
+    // First click on "No team" to reset (go through teams until we hit "No team")
+    for (let i = 0; i < 10; i++) {
+      const text = await button.textContent();
+      if (text && text.toLowerCase().includes('no team')) {
+        break;
+      }
+      await button.click();
+    }
+
+    // Verify URL has no team param when on "No team"
+    let url = new URL(page.url());
+    expect(url.searchParams.has('team')).toBe(false);
+
+    // Click to select a specific team
+    await button.click();
+    const teamText = await button.textContent();
+
+    // URL should now have team parameter
+    url = new URL(page.url());
+    expect(url.searchParams.has('team')).toBe(true);
+    const teamParam = url.searchParams.get('team');
+    expect(teamParam).not.toBeNull();
+
+    // Team param should be lowercase short name (e.g., "serenity" not "TeamSerenity")
+    expect(teamParam).toMatch(/^[a-z]+$/);
+  });
+
+  test('team parameter in URL is applied on page load', async ({ browser }) => {
+    // Open a new page with team parameter in URL
+    const newPage = await browser.newPage();
+    await newPage.goto('/planning?team=serenity');
+    await newPage.waitForSelector('#status:not(.loading)', { timeout: 60000 });
+
+    // Team toggle should show Serenity team
+    const button = newPage.locator('#teamToggle');
+    await expect(button).toContainText(/serenity/i);
+
+    // Table title should reflect the team
+    const tableTitle = newPage.locator('#unassignedTableTitle');
+    await expect(tableTitle).toContainText(/Serenity/i);
+
+    await newPage.close();
+  });
+
   // === Due date badges ===
 
   test('due date badges are present', async () => {

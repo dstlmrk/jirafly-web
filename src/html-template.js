@@ -662,6 +662,44 @@ const CSS_STYLES = `
     background: #1a1a1a;
   }
 
+  .assignee-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .assignee-filter label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  .assignee-filter select {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    min-width: 140px;
+  }
+
+  .assignee-filter select:hover {
+    border-color: var(--text-secondary);
+  }
+
+  .assignee-filter select:focus {
+    outline: none;
+    border-color: var(--text-primary);
+  }
+
+  .table-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
   .issues-table .col-hle.hidden,
   .issues-table th.col-hle.hidden,
   .issues-table td.col-hle.hidden {
@@ -747,7 +785,15 @@ function generateHTML(options) {
     </div>
 
     <div class="table-wrapper" id="tableWrapper" style="display: none;">
-      <div class="table-title" id="tableTitle">Detailed Task List</div>
+      <div class="table-header-row">
+        <div class="table-title" id="tableTitle">Detailed Task List</div>
+        <div class="assignee-filter">
+          <label for="overviewAssigneeFilter">Assignee:</label>
+          <select id="overviewAssigneeFilter">
+            <option value="">All members</option>
+          </select>
+        </div>
+      </div>
       <div id="issuesTableContainer"></div>
     </div>
 
@@ -766,11 +812,19 @@ function generateHTML(options) {
     <div class="table-wrapper" id="unassignedTableWrapper" style="display: none;">
       <div class="table-header-row">
         <div class="table-title" id="unassignedTableTitle">Tasks Without Team</div>
-        <label class="toggle-label">
-          <input type="checkbox" id="hleToggle" checked>
-          <span class="toggle-switch"></span>
-          <span>Show HLE</span>
-        </label>
+        <div class="table-header-controls">
+          <div class="assignee-filter">
+            <label for="planningAssigneeFilter">Assignee:</label>
+            <select id="planningAssigneeFilter">
+              <option value="">All members</option>
+            </select>
+          </div>
+          <label class="toggle-label">
+            <input type="checkbox" id="hleToggle" checked>
+            <span class="toggle-switch"></span>
+            <span>Show HLE</span>
+          </label>
+        </div>
       </div>
       <table class="issues-table" id="unassignedTable">
         <thead>
@@ -801,7 +855,15 @@ function generateHTML(options) {
     </div>
 
     <div class="table-wrapper" id="futureSprintsTableWrapper" style="display: none;">
-      <div class="table-title" id="futureSprintsTableTitle">Future Sprints Tasks</div>
+      <div class="table-header-row">
+        <div class="table-title" id="futureSprintsTableTitle">Future Sprints Tasks</div>
+        <div class="assignee-filter">
+          <label for="futureSprintsAssigneeFilter">Assignee:</label>
+          <select id="futureSprintsAssigneeFilter">
+            <option value="">All members</option>
+          </select>
+        </div>
+      </div>
       <div id="futureSprintsTableContainer"></div>
     </div>
 
@@ -826,6 +888,9 @@ function generateHTML(options) {
     let availableNextSprintTeams = ['NoTeam']; // Available teams for planning page
     let currentMode = 'be'; // Current mode: 'be' or 'fe'
     let futureSprintsData = null; // Cache for future sprints data (contains both BE and FE)
+    let overviewAssigneeFilter = ''; // Selected assignee for overview page
+    let planningAssigneeFilter = ''; // Selected assignee for planning page
+    let futureSprintsAssigneeFilter = ''; // Selected assignee for future sprints page
 
     const COLORS = ${JSON.stringify(CHART_COLORS)};
     const JIRA_BROWSE_URL = '${jiraBrowseUrl}';
@@ -999,6 +1064,56 @@ function generateHTML(options) {
       }
     }
 
+    // Assignee filter functions
+    function getUniqueAssignees(tableData) {
+      const assignees = new Set();
+      tableData.forEach(row => {
+        if (row.assignee) {
+          assignees.add(row.assignee);
+        }
+      });
+      return Array.from(assignees).sort((a, b) => a.localeCompare(b));
+    }
+
+    function populateAssigneeFilter(selectId, assignees, selectedValue) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+
+      // Clear existing options except the first one
+      select.innerHTML = '<option value="">All members</option>';
+
+      // Add assignee options
+      assignees.forEach(assignee => {
+        const option = document.createElement('option');
+        option.value = assignee;
+        option.textContent = assignee;
+        if (assignee === selectedValue) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
+    }
+
+    function handleOverviewAssigneeFilter() {
+      overviewAssigneeFilter = document.getElementById('overviewAssigneeFilter').value;
+      const teamData = getDataForTeam(currentTeam);
+      if (teamData) {
+        renderTable(teamData.tableData);
+      }
+    }
+
+    function handlePlanningAssigneeFilter() {
+      planningAssigneeFilter = document.getElementById('planningAssigneeFilter').value;
+      const filteredData = getNextSprintDataForTeam(currentNextSprintTeam);
+      renderNextSprintTable(filteredData);
+    }
+
+    function handleFutureSprintsAssigneeFilter() {
+      futureSprintsAssigneeFilter = document.getElementById('futureSprintsAssigneeFilter').value;
+      const tableData = getFutureSprintsTableData();
+      renderFutureSprintsTable(tableData);
+    }
+
     async function loadNextSprintData() {
       const statusEl = document.getElementById('status');
       statusEl.className = 'loading';
@@ -1023,12 +1138,16 @@ function generateHTML(options) {
           availableNextSprintTeams = ['NoTeam', ...nextSprintData.teams];
         }
 
-        // Apply saved team from sessionStorage if available
+        // Apply team from URL param > sessionStorage > default 'NoTeam'
+        const { team: urlTeam } = getURLParams();
         const savedTeam = sessionStorage.getItem('jirafly-selected-team');
-        if (savedTeam && availableNextSprintTeams.includes(savedTeam)) {
+        if (urlTeam && urlTeam !== 'All' && availableNextSprintTeams.includes(urlTeam)) {
+          currentNextSprintTeam = urlTeam;
+          sessionStorage.setItem('jirafly-selected-team', urlTeam);
+        } else if (savedTeam && availableNextSprintTeams.includes(savedTeam)) {
           currentNextSprintTeam = savedTeam;
-          updateNextSprintTeamButton(currentNextSprintTeam);
         }
+        updateNextSprintTeamButton(currentNextSprintTeam);
 
         statusEl.className = '';
         updateNextSprintStatus();
@@ -1110,12 +1229,25 @@ function generateHTML(options) {
       const nextIndex = (currentIndex + 1) % availableNextSprintTeams.length;
       currentNextSprintTeam = availableNextSprintTeams[nextIndex];
 
+      // Reset assignee filter when switching teams
+      planningAssigneeFilter = '';
+
       // Save specific team to sessionStorage for cross-page sync
       if (currentNextSprintTeam !== 'NoTeam') {
         sessionStorage.setItem('jirafly-selected-team', currentNextSprintTeam);
       } else {
         sessionStorage.removeItem('jirafly-selected-team');
       }
+
+      // Update URL with team parameter
+      const params = new URLSearchParams(window.location.search);
+      if (currentNextSprintTeam === 'NoTeam') {
+        params.delete('team');
+      } else {
+        params.set('team', toShortTeamName(currentNextSprintTeam));
+      }
+      const newUrl = '/planning' + (params.toString() ? \`?\${params.toString()}\` : '');
+      window.history.pushState({}, '', newUrl);
 
       updateNextSprintTeamButton(currentNextSprintTeam);
 
@@ -1151,17 +1283,26 @@ function generateHTML(options) {
       const tbody = document.getElementById('unassignedTableBody');
       tbody.innerHTML = '';
 
+      // Populate assignee filter with all assignees (before filtering)
+      const allAssignees = getUniqueAssignees(tableData);
+      populateAssigneeFilter('planningAssigneeFilter', allAssignees, planningAssigneeFilter);
+
+      // Apply assignee filter
+      const filteredData = planningAssigneeFilter
+        ? tableData.filter(row => row.assignee === planningAssigneeFilter)
+        : tableData;
+
       let tableTitle;
       if (currentMode === 'fe') {
-        tableTitle = \`FE Tasks (\${tableData.length})\`;
+        tableTitle = \`FE Tasks (\${filteredData.length})\`;
       } else {
         const teamLabel = currentNextSprintTeam === 'NoTeam' ? 'Without Team' : currentNextSprintTeam.replace(/^Team/, '') + ' Team';
-        tableTitle = \`Tasks \${teamLabel} (\${tableData.length})\`;
+        tableTitle = \`Tasks \${teamLabel} (\${filteredData.length})\`;
       }
       document.getElementById('unassignedTableTitle').textContent = tableTitle;
 
       let prevAssignee = null;
-      tableData.forEach(row => {
+      filteredData.forEach(row => {
         const tr = document.createElement('tr');
 
         // Highlight rows with 0 HLE
@@ -1397,14 +1538,23 @@ function generateHTML(options) {
       const container = document.getElementById('futureSprintsTableContainer');
       container.innerHTML = '';
 
+      // Populate assignee filter with all assignees (before filtering)
+      const allAssignees = getUniqueAssignees(tableData);
+      populateAssigneeFilter('futureSprintsAssigneeFilter', allAssignees, futureSprintsAssigneeFilter);
+
+      // Apply assignee filter
+      const filteredData = futureSprintsAssigneeFilter
+        ? tableData.filter(row => row.assignee === futureSprintsAssigneeFilter)
+        : tableData;
+
       const modeLabel = currentMode === 'fe' ? 'FE' : 'BE';
-      const tableTitle = \`\${modeLabel} Future Sprints Tasks (\${tableData.length})\`;
+      const tableTitle = \`\${modeLabel} Future Sprints Tasks (\${filteredData.length})\`;
       document.getElementById('futureSprintsTableTitle').textContent = tableTitle;
 
       // Group data by sprint
       const sprintGroups = {};
       const sprintOrder = [];
-      tableData.forEach(row => {
+      filteredData.forEach(row => {
         if (!sprintGroups[row.sprint]) {
           sprintGroups[row.sprint] = [];
           sprintOrder.push(row.sprint);
@@ -1809,6 +1959,11 @@ function generateHTML(options) {
       // Clear team selection from sessionStorage when switching modes
       sessionStorage.removeItem('jirafly-selected-team');
 
+      // Reset assignee filters when switching modes
+      overviewAssigneeFilter = '';
+      planningAssigneeFilter = '';
+      futureSprintsAssigneeFilter = '';
+
       // Update URL with mode parameter
       const params = new URLSearchParams(window.location.search);
       if (currentMode === 'be') {
@@ -1942,6 +2097,9 @@ function generateHTML(options) {
       const currentIndex = availableTeams.indexOf(currentTeam);
       const nextIndex = (currentIndex + 1) % availableTeams.length;
       currentTeam = availableTeams[nextIndex];
+
+      // Reset assignee filter when switching teams
+      overviewAssigneeFilter = '';
 
       // Save specific team to sessionStorage for cross-page sync
       if (currentTeam !== 'All') {
@@ -2273,13 +2431,22 @@ function generateHTML(options) {
       const container = document.getElementById('issuesTableContainer');
       container.innerHTML = '';
 
+      // Populate assignee filter with all assignees (before filtering)
+      const allAssignees = getUniqueAssignees(tableData);
+      populateAssigneeFilter('overviewAssigneeFilter', allAssignees, overviewAssigneeFilter);
+
+      // Apply assignee filter
+      const filteredData = overviewAssigneeFilter
+        ? tableData.filter(row => row.assignee === overviewAssigneeFilter)
+        : tableData;
+
       // Update table title with count
-      updateTableTitle(tableData.length);
+      updateTableTitle(filteredData.length);
 
       // Group data by sprint
       const sprintGroups = {};
       const sprintOrder = [];
-      tableData.forEach(row => {
+      filteredData.forEach(row => {
         if (!sprintGroups[row.sprint]) {
           sprintGroups[row.sprint] = [];
           sprintOrder.push(row.sprint);
@@ -2467,6 +2634,11 @@ function generateHTML(options) {
       // Set up HLE toggle listener and restore saved state
       document.getElementById('hleToggle').addEventListener('change', toggleHleColumn);
       initHleToggle();
+
+      // Set up assignee filter listeners
+      document.getElementById('overviewAssigneeFilter').addEventListener('change', handleOverviewAssigneeFilter);
+      document.getElementById('planningAssigneeFilter').addEventListener('change', handlePlanningAssigneeFilter);
+      document.getElementById('futureSprintsAssigneeFilter').addEventListener('change', handleFutureSprintsAssigneeFilter);
 
       // Initialize mode from URL params
       const { project } = getURLParams();

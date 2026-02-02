@@ -34,8 +34,8 @@ test.describe('Project toggle (BE/FE)', () => {
     // Mode button should show FE
     await expect(modeButton).toHaveText('FE');
 
-    // Team button should be hidden in FE mode
-    await expect(teamButton).not.toBeVisible();
+    // Team button should be disabled in FE mode (now a select dropdown)
+    await expect(teamButton).toBeDisabled();
 
     // URL should contain project=fe
     expect(page.url()).toContain('project=fe');
@@ -74,7 +74,7 @@ test.describe('Project toggle (BE/FE)', () => {
 
     // Should start in FE mode
     await expect(modeButton).toHaveText('FE');
-    await expect(teamButton).not.toBeVisible();
+    await expect(teamButton).toBeDisabled();
 
     // Click to switch to BE
     await modeButton.click();
@@ -100,7 +100,7 @@ test.describe('Project toggle (BE/FE)', () => {
 
     // Should be in FE mode
     await expect(modeButton).toHaveText('FE');
-    await expect(teamButton).not.toBeVisible();
+    await expect(teamButton).toBeDisabled();
   });
 
   test('data is cached when switching between modes', async ({ page }) => {
@@ -171,8 +171,8 @@ test.describe('Project toggle (BE/FE)', () => {
     // Mode button should show FE
     await expect(modeButton).toHaveText('FE');
 
-    // Team toggle should be hidden in FE mode
-    await expect(teamButton).not.toBeVisible();
+    // Team toggle should be disabled in FE mode
+    await expect(teamButton).toBeDisabled();
 
     // Table title should change to FE
     await expect(tableTitle).toContainText('FE Tasks');
@@ -225,9 +225,9 @@ test.describe('Project toggle (BE/FE)', () => {
     // Mode should still be FE and should load FE data
     await expect(modeButton).toHaveText('FE');
 
-    // Team toggle should be hidden (FE mode)
+    // Team toggle should be disabled (FE mode)
     const teamButton = page.locator('#teamToggle');
-    await expect(teamButton).not.toBeVisible();
+    await expect(teamButton).toBeDisabled();
   });
 
   test('switching from FE planning to BE overview loads correct data', async ({ page }) => {

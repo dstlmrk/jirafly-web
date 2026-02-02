@@ -34,44 +34,38 @@ test.describe.serial('Overview page', () => {
   });
 
   test('issues table is visible with rows', async () => {
-    const table = page.locator('#issuesTable');
-    await expect(table).toBeVisible();
+    const table = page.locator('#issuesTableContainer .issues-table');
+    await expect(table.first()).toBeVisible();
 
-    const rows = page.locator('#issuesTableBody tr');
+    const rows = page.locator('#issuesTableContainer tbody tr');
     const count = await rows.count();
     expect(count).toBeGreaterThan(0);
   });
 
   // === Team toggle ===
 
-  test('team toggle cycles through teams', async () => {
-    const button = page.locator('#teamToggle');
-    const seenTexts = new Set();
+  test('team toggle has multiple team options', async () => {
+    const select = page.locator('#teamToggle');
 
-    // Click through all options (max 10 clicks to avoid infinite loop)
-    for (let i = 0; i < 10; i++) {
-      const text = await button.textContent();
-      if (seenTexts.has(text)) {
-        // We've cycled back to a seen value, stop
-        break;
-      }
-      seenTexts.add(text);
-      await button.click();
+    // Get all options in the select dropdown
+    const options = await select.locator('option').allTextContents();
+
+    // Should have multiple team options (All teams + individual teams)
+    expect(options.length).toBeGreaterThanOrEqual(2);
+
+    // Should include "All teams" option
+    expect(options.some(opt => opt.toLowerCase().includes('all'))).toBe(true);
+
+    // Select a different team
+    if (options.length > 1) {
+      await select.selectOption({ index: 1 });
+      const selectedValue = await select.inputValue();
+      expect(selectedValue).not.toBe('All');
     }
 
-    // Should have seen multiple team options
-    expect(seenTexts.size).toBeGreaterThanOrEqual(2);
-
-    // Reset to "All teams" by clicking until we see it
-    for (let i = 0; i < 10; i++) {
-      const text = await button.textContent();
-      if (text && text.toLowerCase().includes('all')) {
-        break;
-      }
-      await button.click();
-    }
-
-    await expect(button).toContainText(/All/i);
+    // Reset to "All teams"
+    await select.selectOption('All');
+    await expect(select).toHaveValue('All');
   });
 
   // === Dark mode ===
@@ -104,21 +98,22 @@ test.describe.serial('Overview page', () => {
 
   // === Table details ===
 
-  test('table has sprint dividers', async () => {
-    const dividers = page.locator('#issuesTableBody tr.sprint-start');
-    const count = await dividers.count();
+  test('table has sprint sections', async () => {
+    // Each sprint is rendered as a section with a header
+    const sections = page.locator('#issuesTableContainer .sprint-section');
+    const count = await sections.count();
     expect(count).toBeGreaterThan(0);
   });
 
   test('rows with HLE=0 have red background', async () => {
-    const zeroHleRows = page.locator('#issuesTableBody tr.row-hle-zero');
+    const zeroHleRows = page.locator('#issuesTableContainer tr.row-hle-zero');
     const count = await zeroHleRows.count();
     // There might be no zero-HLE rows in current data, so we just check the selector works
     expect(count).toBeGreaterThanOrEqual(0);
   });
 
   test('issue keys are links to Jira', async () => {
-    const firstLink = page.locator('#issuesTableBody a[href*="browse"]').first();
+    const firstLink = page.locator('#issuesTableContainer a[href*="browse"]').first();
     await expect(firstLink).toBeVisible();
     const href = await firstLink.getAttribute('href');
     expect(href).toMatch(/\/browse\/[A-Z]+-\d+/);

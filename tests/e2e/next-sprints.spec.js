@@ -35,10 +35,10 @@ test.describe.serial('Future Sprints page', () => {
   });
 
   test('future sprints table is visible with rows', async () => {
-    const table = page.locator('#futureSprintsTable');
-    await expect(table).toBeVisible();
+    const table = page.locator('#futureSprintsTableContainer .issues-table');
+    await expect(table.first()).toBeVisible();
 
-    const rows = page.locator('#futureSprintsTableBody tr');
+    const rows = page.locator('#futureSprintsTableContainer tbody tr');
     const count = await rows.count();
     expect(count).toBeGreaterThan(0);
   });
@@ -46,10 +46,10 @@ test.describe.serial('Future Sprints page', () => {
   // === Table content ===
 
   test('table has required columns', async () => {
-    const headers = page.locator('#futureSprintsTable thead th');
+    const headers = page.locator('#futureSprintsTableContainer thead th');
     const headerTexts = await headers.allTextContents();
 
-    expect(headerTexts.some(h => h.includes('Sprint'))).toBe(true);
+    // Note: Sprint is shown as section headers, not table columns
     expect(headerTexts.some(h => h.includes('Assignee'))).toBe(true);
     expect(headerTexts.some(h => h.includes('WSJF'))).toBe(true);
     expect(headerTexts.some(h => h.includes('Task'))).toBe(true);
@@ -59,15 +59,15 @@ test.describe.serial('Future Sprints page', () => {
   });
 
   test('issue keys are links to Jira', async () => {
-    const firstLink = page.locator('#futureSprintsTableBody a[href*="browse"]').first();
+    const firstLink = page.locator('#futureSprintsTableContainer a[href*="browse"]').first();
     await expect(firstLink).toBeVisible();
     const href = await firstLink.getAttribute('href');
     expect(href).toMatch(/\/browse\/[A-Z]+-\d+/);
   });
 
-  test('sprint badges are visible', async () => {
-    const sprintBadges = page.locator('#futureSprintsTableBody .sprint-badge');
-    const count = await sprintBadges.count();
+  test('sprint section headers are visible', async () => {
+    const sprintHeaders = page.locator('#futureSprintsTableContainer .sprint-header');
+    const count = await sprintHeaders.count();
     expect(count).toBeGreaterThan(0);
   });
 
@@ -75,7 +75,7 @@ test.describe.serial('Future Sprints page', () => {
 
   test('due date badges are present', async () => {
     // Some tasks may have due dates with badges
-    const badges = page.locator('#futureSprintsTableBody .due-date-badge');
+    const badges = page.locator('#futureSprintsTableContainer .due-date-badge');
     const count = await badges.count();
     // Not all tasks have due dates, so we just verify the selector works
     expect(count).toBeGreaterThanOrEqual(0);
@@ -90,9 +90,9 @@ test.describe.serial('Future Sprints page', () => {
     await expect(modeButton).toHaveText('BE');
   });
 
-  test('team toggle is hidden', async () => {
+  test('team toggle is disabled', async () => {
     const teamButton = page.locator('#teamToggle');
-    await expect(teamButton).not.toBeVisible();
+    await expect(teamButton).toBeDisabled();
   });
 
   test('switching to FE mode updates table title', async () => {

@@ -62,48 +62,46 @@ test.describe.serial('Planning page', () => {
 
   // === Team toggle ===
 
-  test('team toggle cycles through teams', async () => {
-    const button = page.locator('#teamToggle');
+  test('team toggle has multiple team options', async () => {
+    const select = page.locator('#teamToggle');
 
-    // Get initial state
-    const initialText = await button.textContent();
+    // Get all options in the select dropdown
+    const options = await select.locator('option').allTextContents();
 
-    // Click through all teams
-    await button.click();
-    const firstTeam = await button.textContent();
-    expect(firstTeam).not.toBe(initialText);
+    // Should have multiple team options (No team + individual teams)
+    expect(options.length).toBeGreaterThanOrEqual(2);
 
-    await button.click();
-    const secondTeam = await button.textContent();
-    expect(secondTeam).not.toBe(firstTeam);
+    // Should include "No team" option
+    expect(options.some(opt => opt.toLowerCase().includes('no team'))).toBe(true);
 
-    await button.click();
-    const thirdTeam = await button.textContent();
-    expect(thirdTeam).not.toBe(secondTeam);
+    // Select different teams to verify they work
+    if (options.length > 1) {
+      await select.selectOption({ index: 1 });
+      const selectedValue = await select.inputValue();
+      expect(selectedValue).not.toBe('NoTeam');
+    }
 
-    await button.click();
-    const fourthTeam = await button.textContent();
-    expect(fourthTeam).not.toBe(thirdTeam);
-
-    await button.click();
-    const fifthTeam = await button.textContent();
-    expect(fifthTeam).not.toBe(fourthTeam);
-
-    // After cycling through all (No team, Serenity, Falcon, Discovery, Kosmik, All),
-    // we should be back at the start or continue cycling
+    // Reset to "No team"
+    await select.selectOption('NoTeam');
+    await expect(select).toHaveValue('NoTeam');
   });
 
   test('team toggle saves to sessionStorage', async () => {
-    const button = page.locator('#teamToggle');
+    const select = page.locator('#teamToggle');
 
-    // Click until we select a specific team (not "No team" or "All")
-    for (let i = 0; i < 10; i++) {
-      await button.click();
-      const text = await button.textContent();
-      if (text && !text.toLowerCase().includes('no team') && !text.toLowerCase().includes('all')) {
+    // Get all options
+    const options = await select.locator('option').all();
+
+    // Find a team option that isn't "No team"
+    for (const option of options) {
+      const value = await option.getAttribute('value');
+      if (value && value !== 'NoTeam') {
+        await select.selectOption(value);
+
         // Check sessionStorage has the team saved
         const savedTeam = await page.evaluate(() => sessionStorage.getItem('jirafly-selected-team'));
         expect(savedTeam).not.toBeNull();
+        expect(savedTeam).toBe(value);
         return;
       }
     }
@@ -113,33 +111,38 @@ test.describe.serial('Planning page', () => {
   });
 
   test('team toggle updates URL with team parameter', async () => {
-    const button = page.locator('#teamToggle');
+    const select = page.locator('#teamToggle');
 
-    // First click on "No team" to reset (go through teams until we hit "No team")
-    for (let i = 0; i < 10; i++) {
-      const text = await button.textContent();
-      if (text && text.toLowerCase().includes('no team')) {
-        break;
-      }
-      await button.click();
-    }
+    // Reset to "No team"
+    await select.selectOption('NoTeam');
 
     // Verify URL has no team param when on "No team"
     let url = new URL(page.url());
     expect(url.searchParams.has('team')).toBe(false);
 
-    // Click to select a specific team
-    await button.click();
-    const teamText = await button.textContent();
+    // Select a specific team (find first non-NoTeam option)
+    const options = await select.locator('option').all();
+    let teamValue = null;
+    for (const option of options) {
+      const value = await option.getAttribute('value');
+      if (value && value !== 'NoTeam') {
+        teamValue = value;
+        break;
+      }
+    }
 
-    // URL should now have team parameter
-    url = new URL(page.url());
-    expect(url.searchParams.has('team')).toBe(true);
-    const teamParam = url.searchParams.get('team');
-    expect(teamParam).not.toBeNull();
+    if (teamValue) {
+      await select.selectOption(teamValue);
 
-    // Team param should be lowercase short name (e.g., "serenity" not "TeamSerenity")
-    expect(teamParam).toMatch(/^[a-z]+$/);
+      // URL should now have team parameter
+      url = new URL(page.url());
+      expect(url.searchParams.has('team')).toBe(true);
+      const teamParam = url.searchParams.get('team');
+      expect(teamParam).not.toBeNull();
+
+      // Team param should be lowercase short name (e.g., "serenity" not "TeamSerenity")
+      expect(teamParam).toMatch(/^[a-z]+$/);
+    }
   });
 
   test('team parameter in URL is applied on page load', async ({ browser }) => {
@@ -197,24 +200,24 @@ test.describe.serial('Planning page', () => {
     await expect(modeButton).toHaveText('BE');
   });
 
-  test('switching to FE mode hides team toggle', async () => {
+  test('switching to FE mode disables team toggle', async () => {
     const modeButton = page.locator('#modeToggle');
     const teamButton = page.locator('#teamToggle');
 
-    // Team toggle should be visible in BE mode
-    await expect(teamButton).toBeVisible();
+    // Team toggle should be enabled in BE mode
+    await expect(teamButton).toBeEnabled();
 
     // Switch to FE
     await modeButton.click();
     await expect(modeButton).toHaveText('FE');
 
-    // Team toggle should be hidden
-    await expect(teamButton).not.toBeVisible();
+    // Team toggle should be disabled
+    await expect(teamButton).toBeDisabled();
 
     // Switch back to BE for other tests
     await modeButton.click();
     await expect(modeButton).toHaveText('BE');
-    await expect(teamButton).toBeVisible();
+    await expect(teamButton).toBeEnabled();
   });
 
   test('FE mode shows FE Tasks in table title', async () => {

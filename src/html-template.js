@@ -97,6 +97,44 @@ const CSS_STYLES = `
     align-items: center;
   }
 
+  .header-filter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    height: 41px;
+    padding: 0 32px 0 12px;
+    background-color: var(--btn-bg);
+    color: var(--btn-text);
+    border: none;
+    cursor: pointer;
+    width: 180px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+  }
+
+  body.dark .header-filter {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231a1a1a' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  }
+
+  .header-filter:hover {
+    background-color: var(--btn-hover);
+  }
+
+  .header-filter:focus {
+    outline: none;
+  }
+
+  .header-filter:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .group-toggle {
     background: var(--btn-bg);
     color: var(--btn-text);
@@ -109,6 +147,8 @@ const CSS_STYLES = `
     text-transform: uppercase;
     letter-spacing: 0.5px;
     transition: background 0.2s;
+    width: 160px;
+    text-align: center;
   }
 
   .group-toggle:hover {
@@ -738,8 +778,13 @@ function generateHTML(options) {
         <p class="subtitle">Making Jira slightly less painful</p>
       </div>
       <div class="header-buttons">
-        <button id="teamToggle" class="group-toggle" disabled>All teams</button>
         <button id="modeToggle" class="mode-toggle" title="Toggle BE/FE mode">BE</button>
+        <select id="teamToggle" class="header-filter" disabled>
+          <option value="All">All teams</option>
+        </select>
+        <select id="overviewAssigneeFilter" class="header-filter" disabled>
+          <option value="">All members</option>
+        </select>
         <button id="themeToggle" class="theme-toggle" title="Toggle dark mode">
           <svg id="moonIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
@@ -785,15 +830,7 @@ function generateHTML(options) {
     </div>
 
     <div class="table-wrapper" id="tableWrapper" style="display: none;">
-      <div class="table-header-row">
-        <div class="table-title" id="tableTitle">Detailed Task List</div>
-        <div class="assignee-filter">
-          <label for="overviewAssigneeFilter">Assignee:</label>
-          <select id="overviewAssigneeFilter">
-            <option value="">All members</option>
-          </select>
-        </div>
-      </div>
+      <div class="table-title" id="tableTitle">Detailed Task List</div>
       <div id="issuesTableContainer"></div>
     </div>
 
@@ -976,6 +1013,7 @@ function generateHTML(options) {
         modeToggle.disabled = false;
         updateModeButton();
         updateTeamButtonVisibility();
+        updateOverviewAssigneeFilterVisibility();
 
         // Get cached data for current mode
         const cachedData = currentMode === 'be' ? beDataCache : feDataCache;
@@ -993,6 +1031,8 @@ function generateHTML(options) {
           } else {
             availableTeams = ['All'];
           }
+          // Populate team filter dropdown
+          populateTeamFilter(allData.teams || [], currentTeam);
 
           // Show cached data - always re-render with current team (may have changed)
           const teamData = getDataForTeam(currentTeam);
@@ -1025,8 +1065,15 @@ function generateHTML(options) {
         modeToggle.style.display = '';
         modeToggle.disabled = false;
         modeToggle.textContent = currentMode.toUpperCase();
-        // Show team toggle only in BE mode
-        document.getElementById('teamToggle').style.display = currentMode === 'be' ? '' : 'none';
+        // In FE mode, show disabled team toggle with "No team"
+        const teamSelect = document.getElementById('teamToggle');
+        if (currentMode === 'fe') {
+          teamSelect.innerHTML = '<option value="NoTeam">No team</option>';
+          teamSelect.disabled = true;
+        }
+        teamSelect.style.display = '';
+        // Hide overview assignee filter
+        document.getElementById('overviewAssigneeFilter').style.display = 'none';
 
         // Load next-sprint data if not cached
         if (!nextSprintData) {
@@ -1046,8 +1093,13 @@ function generateHTML(options) {
         modeToggle.style.display = '';
         modeToggle.disabled = false;
         modeToggle.textContent = currentMode.toUpperCase();
-        // Hide team toggle on future sprints page
-        document.getElementById('teamToggle').style.display = 'none';
+        // Show disabled team toggle on future sprints page
+        const teamSelect = document.getElementById('teamToggle');
+        teamSelect.innerHTML = '<option value="All">All teams</option>';
+        teamSelect.disabled = true;
+        teamSelect.style.display = '';
+        // Hide overview assignee filter
+        document.getElementById('overviewAssigneeFilter').style.display = 'none';
 
         // Load future sprints data if not cached
         if (!futureSprintsData) {
@@ -1147,7 +1199,8 @@ function generateHTML(options) {
         } else if (savedTeam && availableNextSprintTeams.includes(savedTeam)) {
           currentNextSprintTeam = savedTeam;
         }
-        updateNextSprintTeamButton(currentNextSprintTeam);
+        // Populate team filter dropdown for planning page
+        populatePlanningTeamFilter(nextSprintData.teams || [], currentNextSprintTeam);
 
         statusEl.className = '';
         updateNextSprintStatus();
@@ -1158,8 +1211,8 @@ function generateHTML(options) {
         document.getElementById('nextSprintChartsContainer').style.display = 'grid';
         document.getElementById('unassignedTableWrapper').style.display = 'block';
 
-        // Enable team toggle button
-        document.getElementById('teamToggle').disabled = false;
+        // Enable team toggle button (only in BE mode)
+        document.getElementById('teamToggle').disabled = currentMode === 'fe';
       } catch (error) {
         statusEl.className = 'error';
         statusEl.textContent = \`Error: \${error.message}\`;
@@ -1214,20 +1267,28 @@ function generateHTML(options) {
     }
 
     function updateNextSprintTeamButton(team) {
-      const button = document.getElementById('teamToggle');
-      if (team === 'NoTeam') {
-        button.textContent = 'No team';
-      } else {
-        // Strip "Team" prefix and add " team" suffix
-        const displayName = team.replace(/^Team/i, '');
-        button.textContent = \`\${displayName} team\`;
-      }
+      const select = document.getElementById('teamToggle');
+      select.value = team;
     }
 
-    function toggleNextSprintTeam() {
-      const currentIndex = availableNextSprintTeams.indexOf(currentNextSprintTeam);
-      const nextIndex = (currentIndex + 1) % availableNextSprintTeams.length;
-      currentNextSprintTeam = availableNextSprintTeams[nextIndex];
+    function populatePlanningTeamFilter(teams, selectedValue) {
+      const select = document.getElementById('teamToggle');
+      select.innerHTML = '<option value="NoTeam">No team</option>';
+      teams.forEach(team => {
+        const option = document.createElement('option');
+        option.value = team;
+        // Strip "Team" prefix and add " team" suffix for display
+        const displayName = team.replace(/^Team/i, '');
+        option.textContent = \`\${displayName} team\`;
+        if (team === selectedValue) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
+    }
+
+    function handlePlanningTeamChange() {
+      currentNextSprintTeam = document.getElementById('teamToggle').value;
 
       // Reset assignee filter when switching teams
       planningAssigneeFilter = '';
@@ -1248,8 +1309,6 @@ function generateHTML(options) {
       }
       const newUrl = '/planning' + (params.toString() ? \`?\${params.toString()}\` : '');
       window.history.pushState({}, '', newUrl);
-
-      updateNextSprintTeamButton(currentNextSprintTeam);
 
       // Re-render with filtered data
       const filteredData = getNextSprintDataForTeam(currentNextSprintTeam);
@@ -1982,12 +2041,19 @@ function generateHTML(options) {
 
       // Handle planning page toggle
       if (currentPage === 'planning') {
-        // Update team toggle visibility (hide in FE mode)
-        document.getElementById('teamToggle').style.display = currentMode === 'be' ? '' : 'none';
+        // In FE mode, show disabled team toggle with "No team"
+        const teamSelect = document.getElementById('teamToggle');
+        if (currentMode === 'fe') {
+          teamSelect.innerHTML = '<option value="NoTeam">No team</option>';
+          teamSelect.disabled = true;
+        } else {
+          // Repopulate with teams for BE mode
+          populatePlanningTeamFilter(nextSprintData?.teams || [], 'NoTeam');
+          teamSelect.disabled = false;
+        }
 
         // Reset team selection
         currentNextSprintTeam = 'NoTeam';
-        updateNextSprintTeamButton(currentNextSprintTeam);
 
         // Update status with current mode's version
         updateNextSprintStatus();
@@ -2031,7 +2097,8 @@ function generateHTML(options) {
 
         // Reset team selection
         currentTeam = 'All';
-        updateTeamButton(currentTeam);
+        // Populate team filter dropdown
+        populateTeamFilter(allData.teams || [], currentTeam);
 
         // Render cached data
         const teamData = getDataForTeam(currentTeam);
@@ -2079,24 +2146,35 @@ function generateHTML(options) {
     }
 
     function updateTeamButtonVisibility() {
-      const teamButton = document.getElementById('teamToggle');
-      // Hide team button in FE mode (only one team) or on planning page when in FE mode
+      const teamSelect = document.getElementById('teamToggle');
+      // In FE mode, show disabled team select with "All teams"
       if (currentMode === 'fe' && currentPage === 'history') {
-        teamButton.style.display = 'none';
+        teamSelect.innerHTML = '<option value="All">All teams</option>';
+        teamSelect.disabled = true;
+        teamSelect.style.display = '';
       } else {
-        teamButton.style.display = '';
+        teamSelect.style.display = '';
       }
     }
 
-    function toggleTeam() {
+    function updateOverviewAssigneeFilterVisibility() {
+      const filter = document.getElementById('overviewAssigneeFilter');
+      // Show only on overview (history) page
+      if (currentPage === 'history') {
+        filter.style.display = '';
+        filter.disabled = !allData;
+      } else {
+        filter.style.display = 'none';
+      }
+    }
+
+    function handleTeamChange() {
       if (currentPage === 'planning') {
-        toggleNextSprintTeam();
+        handlePlanningTeamChange();
         return;
       }
 
-      const currentIndex = availableTeams.indexOf(currentTeam);
-      const nextIndex = (currentIndex + 1) % availableTeams.length;
-      currentTeam = availableTeams[nextIndex];
+      currentTeam = document.getElementById('teamToggle').value;
 
       // Reset assignee filter when switching teams
       overviewAssigneeFilter = '';
@@ -2118,8 +2196,6 @@ function generateHTML(options) {
       const newUrl = params.toString() ? \`?\${params.toString()}\` : window.location.pathname;
       window.history.pushState({}, '', newUrl);
 
-      updateTeamButton(currentTeam);
-
       // Re-render with team data
       const teamData = getDataForTeam(currentTeam);
       if (teamData) {
@@ -2129,14 +2205,24 @@ function generateHTML(options) {
     }
 
     function updateTeamButton(team) {
-      const button = document.getElementById('teamToggle');
-      if (team === 'All') {
-        button.textContent = 'All teams';
-      } else {
-        // Strip "Team" prefix and add " team" suffix
+      const select = document.getElementById('teamToggle');
+      select.value = team;
+    }
+
+    function populateTeamFilter(teams, selectedValue) {
+      const select = document.getElementById('teamToggle');
+      select.innerHTML = '<option value="All">All teams</option>';
+      teams.forEach(team => {
+        const option = document.createElement('option');
+        option.value = team;
+        // Strip "Team" prefix and add " team" suffix for display
         const displayName = team.replace(/^Team/i, '');
-        button.textContent = \`\${displayName} team\`;
-      }
+        option.textContent = \`\${displayName} team\`;
+        if (team === selectedValue) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
     }
 
     function updateTableTitle(count) {
@@ -2214,7 +2300,8 @@ function generateHTML(options) {
             currentTeam = 'All';
           }
         }
-        updateTeamButton(currentTeam);
+        // Populate team filter dropdown
+        populateTeamFilter(data.teams || [], currentTeam);
         updateTeamButtonVisibility();
 
         statusEl.className = '';
@@ -2248,6 +2335,9 @@ function generateHTML(options) {
         // Enable team toggle button (only in BE mode)
         const teamButton = document.getElementById('teamToggle');
         teamButton.disabled = currentMode === 'fe';
+
+        // Enable assignee filter
+        document.getElementById('overviewAssigneeFilter').disabled = false;
       } catch (error) {
         statusEl.className = 'error';
         statusEl.textContent = \`Error: \${error.message}\`;
@@ -2629,7 +2719,7 @@ function generateHTML(options) {
       document.getElementById('modeToggle').addEventListener('click', toggleMode);
 
       // Set up team toggle listener
-      document.getElementById('teamToggle').addEventListener('click', toggleTeam);
+      document.getElementById('teamToggle').addEventListener('change', handleTeamChange);
 
       // Set up HLE toggle listener and restore saved state
       document.getElementById('hleToggle').addEventListener('change', toggleHleColumn);
@@ -2654,19 +2744,26 @@ function generateHTML(options) {
         modeToggle.disabled = false;
         modeToggle.textContent = currentMode.toUpperCase();
         loadNextSprintData();
-        // Initialize team toggle for planning page (show only in BE mode)
-        const teamButton = document.getElementById('teamToggle');
-        teamButton.disabled = true; // Will be enabled after data loads
-        teamButton.textContent = 'No team';
-        teamButton.style.display = currentMode === 'be' ? '' : 'none';
+        // Initialize team toggle for planning page
+        const teamSelect = document.getElementById('teamToggle');
+        teamSelect.innerHTML = '<option value="NoTeam">No team</option>';
+        teamSelect.disabled = true; // Will be enabled after data loads (only in BE mode)
+        teamSelect.style.display = '';
+        // Hide overview assignee filter
+        document.getElementById('overviewAssigneeFilter').style.display = 'none';
       } else if (currentPage === 'next-sprints') {
         // Enable mode toggle on future sprints page
         const modeToggle = document.getElementById('modeToggle');
         modeToggle.disabled = false;
         modeToggle.textContent = currentMode.toUpperCase();
         loadFutureSprintsData();
-        // Hide team toggle on future sprints page
-        document.getElementById('teamToggle').style.display = 'none';
+        // Show disabled team toggle on future sprints page
+        const teamSelect = document.getElementById('teamToggle');
+        teamSelect.innerHTML = '<option value="All">All teams</option>';
+        teamSelect.disabled = true;
+        teamSelect.style.display = '';
+        // Hide overview assignee filter
+        document.getElementById('overviewAssigneeFilter').style.display = 'none';
       }
     });
   </script>

@@ -2127,10 +2127,18 @@ function generateHTML(options) {
         // Update team button state
         const teamButton = document.getElementById('teamToggle');
         teamButton.disabled = currentMode === 'fe';
+
+        // Enable assignee filter (renderTable already populated it)
+        document.getElementById('overviewAssigneeFilter').disabled = false;
       } else {
         // Hide content while loading new data
         document.getElementById('chartsContainer').style.display = 'none';
         document.getElementById('tableWrapper').style.display = 'none';
+
+        // Clear and disable assignee filter while loading
+        const assigneeFilter = document.getElementById('overviewAssigneeFilter');
+        assigneeFilter.innerHTML = '<option value="">All members</option>';
+        assigneeFilter.disabled = true;
 
         // Clear current data and reload
         allData = null;

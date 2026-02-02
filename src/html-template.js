@@ -210,13 +210,11 @@ const CSS_STYLES = `
 
   #status.loading {
     border-color: var(--text-secondary);
-    justify-content: flex-start;
   }
 
   #status.error {
     border-color: var(--text-primary);
     color: #ef4444;
-    justify-content: flex-start;
   }
 
   .status-sprint-info {
@@ -348,6 +346,31 @@ const CSS_STYLES = `
   .issues-table .col-sprint {
     width: 60px;
     font-weight: 500;
+  }
+
+  .sprint-section {
+    margin-bottom: 32px;
+  }
+
+  .sprint-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .sprint-header {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: #000;
+    margin-bottom: 12px;
+    padding: 6px 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  body.dark .sprint-header {
+    background: #e5e5e5;
+    color: #1a1a1a;
   }
 
   .issues-table .col-assignee {
@@ -725,21 +748,7 @@ function generateHTML(options) {
 
     <div class="table-wrapper" id="tableWrapper" style="display: none;">
       <div class="table-title" id="tableTitle">Detailed Task List</div>
-      <table class="issues-table" id="issuesTable">
-        <thead>
-          <tr>
-            <th class="col-sprint">Sprint</th>
-            <th class="col-assignee">Assignee</th>
-            <th class="col-task">Task</th>
-            <th class="col-hle">HLE</th>
-            <th class="col-time">Tracked</th>
-            <th class="col-version">Fix Version</th>
-            <th class="col-status">Status</th>
-          </tr>
-        </thead>
-        <tbody id="issuesTableBody">
-        </tbody>
-      </table>
+      <div id="issuesTableContainer"></div>
     </div>
 
     <div class="charts-container" id="nextSprintChartsContainer" style="display: none;">
@@ -793,21 +802,7 @@ function generateHTML(options) {
 
     <div class="table-wrapper" id="futureSprintsTableWrapper" style="display: none;">
       <div class="table-title" id="futureSprintsTableTitle">Future Sprints Tasks</div>
-      <table class="issues-table" id="futureSprintsTable">
-        <thead>
-          <tr>
-            <th class="col-sprint">Sprint</th>
-            <th class="col-assignee">Assignee</th>
-            <th class="col-wsjf">WSJF</th>
-            <th class="col-task">Task</th>
-            <th class="col-hle">HLE</th>
-            <th class="col-due">Due Date</th>
-            <th class="col-status">Status</th>
-          </tr>
-        </thead>
-        <tbody id="futureSprintsTableBody">
-        </tbody>
-      </table>
+      <div id="futureSprintsTableContainer"></div>
     </div>
 
     </div>
@@ -1007,7 +1002,7 @@ function generateHTML(options) {
     async function loadNextSprintData() {
       const statusEl = document.getElementById('status');
       statusEl.className = 'loading';
-      statusEl.innerHTML = '<span class="spinner"></span>Loading tasks for next sprint...';
+      statusEl.innerHTML = '<span><span class="spinner"></span>Loading tasks for next sprint...</span>';
 
       try {
         const response = await fetch('/api/next-sprint');
@@ -1256,7 +1251,7 @@ function generateHTML(options) {
     async function loadFutureSprintsData() {
       const statusEl = document.getElementById('status');
       statusEl.className = 'loading';
-      statusEl.innerHTML = '<span class="spinner"></span>Loading future sprints...';
+      statusEl.innerHTML = '<span><span class="spinner"></span>Loading future sprints...</span>';
 
       try {
         const response = await fetch('/api/next-sprints');
@@ -1399,114 +1394,143 @@ function generateHTML(options) {
     }
 
     function renderFutureSprintsTable(tableData) {
-      const tbody = document.getElementById('futureSprintsTableBody');
-      tbody.innerHTML = '';
+      const container = document.getElementById('futureSprintsTableContainer');
+      container.innerHTML = '';
 
       const modeLabel = currentMode === 'fe' ? 'FE' : 'BE';
       const tableTitle = \`\${modeLabel} Future Sprints Tasks (\${tableData.length})\`;
       document.getElementById('futureSprintsTableTitle').textContent = tableTitle;
 
-      let prevSprint = null;
-      let prevAssignee = null;
-
+      // Group data by sprint
+      const sprintGroups = {};
+      const sprintOrder = [];
       tableData.forEach(row => {
-        const tr = document.createElement('tr');
-
-        // Add sprint-start class for visual separation between sprints
-        if (row.sprint !== prevSprint && prevSprint !== null) {
-          tr.classList.add('sprint-start');
+        if (!sprintGroups[row.sprint]) {
+          sprintGroups[row.sprint] = [];
+          sprintOrder.push(row.sprint);
         }
+        sprintGroups[row.sprint].push(row);
+      });
 
-        // Highlight rows with 0 HLE
-        if (!row.hle || row.hle === 0) {
-          tr.classList.add('row-hle-zero');
-        }
+      // Create a section for each sprint
+      sprintOrder.forEach(sprint => {
+        const sprintData = sprintGroups[sprint];
 
-        // Sprint column (show badge only on first occurrence per sprint group)
-        const sprintTd = document.createElement('td');
-        sprintTd.className = 'col-sprint';
-        if (row.sprint !== prevSprint) {
-          sprintTd.innerHTML = \`<span class="sprint-badge">\${row.sprint}</span>\`;
-          prevSprint = row.sprint;
-          prevAssignee = null; // Reset assignee when sprint changes
-        } else {
-          sprintTd.innerHTML = '<span class="empty-cell">—</span>';
-        }
-        tr.appendChild(sprintTd);
+        const section = document.createElement('div');
+        section.className = 'sprint-section';
 
-        // Assignee column (show only if different from previous within same sprint)
-        const assigneeTd = document.createElement('td');
-        assigneeTd.className = 'col-assignee';
-        if (row.assignee !== prevAssignee) {
-          assigneeTd.textContent = row.assignee || 'Unassigned';
-          prevAssignee = row.assignee;
-        } else {
-          assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
-        }
-        tr.appendChild(assigneeTd);
+        // Sprint header
+        const header = document.createElement('div');
+        header.className = 'sprint-header';
+        header.textContent = \`Sprint \${sprint} (\${sprintData.length})\`;
+        section.appendChild(header);
 
-        // WSJF column
-        const wsjfTd = document.createElement('td');
-        wsjfTd.className = 'col-wsjf';
-        wsjfTd.textContent = row.wsjf ? row.wsjf.toFixed(1) : '-';
-        tr.appendChild(wsjfTd);
+        // Create table for this sprint
+        const table = document.createElement('table');
+        table.className = 'issues-table';
 
-        // Task column
-        const taskTd = document.createElement('td');
-        taskTd.className = 'col-task';
-        const jiraUrl = \`\${JIRA_BROWSE_URL}\${row.key}\`;
-        let typeClass = 'task-type';
-        if (row.issueType === 'Bug') typeClass += ' task-type-bug';
-        else if (row.issueType === 'Epic') typeClass += ' task-type-epic';
-        else if (row.issueType === 'Analysis') typeClass += ' task-type-analysis';
-
-        // Summary class based on category
-        let summaryClass = 'task-summary';
-        if (row.category === 'Maintenance') summaryClass += ' task-summary-maintenance';
-        else if (row.category === 'Excluded') summaryClass += ' task-summary-excluded';
-
-        taskTd.innerHTML = \`
-          <span class="\${typeClass}">\${row.typeAbbr}</span>
-          <a href="\${jiraUrl}" target="_blank" class="task-key">\${row.key}</a>:
-          <span class="\${summaryClass}">\${row.summary}</span>
+        const thead = document.createElement('thead');
+        thead.innerHTML = \`
+          <tr>
+            <th class="col-assignee">Assignee</th>
+            <th class="col-wsjf">WSJF</th>
+            <th class="col-task">Task</th>
+            <th class="col-hle">HLE</th>
+            <th class="col-due">Due Date</th>
+            <th class="col-status">Status</th>
+          </tr>
         \`;
-        tr.appendChild(taskTd);
+        table.appendChild(thead);
 
-        // HLE column
-        const hleTd = document.createElement('td');
-        hleTd.className = 'col-hle';
-        if (!row.hle || row.hle === 0) {
-          hleTd.innerHTML = '<span class="hle-zero">0</span>';
-        } else {
-          hleTd.textContent = row.hle.toFixed(2);
-        }
-        tr.appendChild(hleTd);
+        const tbody = document.createElement('tbody');
+        let prevAssignee = null;
 
-        // Due Date column
-        const dueTd = document.createElement('td');
-        dueTd.className = 'col-due';
-        if (row.dueDateRaw) {
-          dueTd.innerHTML = \`<span class="due-badge">\${row.dueDate}</span>\`;
-        } else {
-          dueTd.innerHTML = '<span class="empty-cell">-</span>';
-        }
-        tr.appendChild(dueTd);
+        sprintData.forEach(row => {
+          const tr = document.createElement('tr');
 
-        // Status column
-        const statusTd = document.createElement('td');
-        statusTd.className = 'col-status';
-        const doneStatuses = ['Done', 'In Testing', 'Merged'];
-        const reviewStatuses = ['In Review'];
-        let statusClass = 'status-label';
-        if (doneStatuses.includes(row.status)) {
-          statusClass += ' status-done';
-        } else if (reviewStatuses.includes(row.status)) {
-          statusClass += ' status-review';
-        }
-        statusTd.innerHTML = \`<span class="\${statusClass}">\${row.status}</span>\`;
-        tr.appendChild(statusTd);
+          // Highlight rows with 0 HLE
+          if (!row.hle || row.hle === 0) {
+            tr.classList.add('row-hle-zero');
+          }
 
-        tbody.appendChild(tr);
+          // Assignee column (show only if different from previous)
+          const assigneeTd = document.createElement('td');
+          assigneeTd.className = 'col-assignee';
+          if (row.assignee !== prevAssignee) {
+            assigneeTd.textContent = row.assignee || 'Unassigned';
+            prevAssignee = row.assignee;
+          } else {
+            assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
+          }
+          tr.appendChild(assigneeTd);
+
+          // WSJF column
+          const wsjfTd = document.createElement('td');
+          wsjfTd.className = 'col-wsjf';
+          wsjfTd.textContent = row.wsjf ? row.wsjf.toFixed(1) : '-';
+          tr.appendChild(wsjfTd);
+
+          // Task column
+          const taskTd = document.createElement('td');
+          taskTd.className = 'col-task';
+          const jiraUrl = \`\${JIRA_BROWSE_URL}\${row.key}\`;
+          let typeClass = 'task-type';
+          if (row.issueType === 'Bug') typeClass += ' task-type-bug';
+          else if (row.issueType === 'Epic') typeClass += ' task-type-epic';
+          else if (row.issueType === 'Analysis') typeClass += ' task-type-analysis';
+
+          // Summary class based on category
+          let summaryClass = 'task-summary';
+          if (row.category === 'Maintenance') summaryClass += ' task-summary-maintenance';
+          else if (row.category === 'Excluded') summaryClass += ' task-summary-excluded';
+
+          taskTd.innerHTML = \`
+            <span class="\${typeClass}">\${row.typeAbbr}</span>
+            <a href="\${jiraUrl}" target="_blank" class="task-key">\${row.key}</a>:
+            <span class="\${summaryClass}">\${row.summary}</span>
+          \`;
+          tr.appendChild(taskTd);
+
+          // HLE column
+          const hleTd = document.createElement('td');
+          hleTd.className = 'col-hle';
+          if (!row.hle || row.hle === 0) {
+            hleTd.innerHTML = '<span class="hle-zero">0</span>';
+          } else {
+            hleTd.textContent = row.hle.toFixed(2);
+          }
+          tr.appendChild(hleTd);
+
+          // Due Date column
+          const dueTd = document.createElement('td');
+          dueTd.className = 'col-due';
+          if (row.dueDateRaw) {
+            dueTd.innerHTML = \`<span class="due-badge">\${row.dueDate}</span>\`;
+          } else {
+            dueTd.innerHTML = '<span class="empty-cell">-</span>';
+          }
+          tr.appendChild(dueTd);
+
+          // Status column
+          const statusTd = document.createElement('td');
+          statusTd.className = 'col-status';
+          const doneStatuses = ['Done', 'In Testing', 'Merged'];
+          const reviewStatuses = ['In Review'];
+          let statusClass = 'status-label';
+          if (doneStatuses.includes(row.status)) {
+            statusClass += ' status-done';
+          } else if (reviewStatuses.includes(row.status)) {
+            statusClass += ' status-review';
+          }
+          statusTd.innerHTML = \`<span class="\${statusClass}">\${row.status}</span>\`;
+          tr.appendChild(statusTd);
+
+          tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        section.appendChild(table);
+        container.appendChild(section);
       });
     }
 
@@ -1982,7 +2006,7 @@ function generateHTML(options) {
       console.log('[loadData] currentMode:', currentMode, 'apiUrl:', apiUrl);
 
       statusEl.className = 'loading';
-      statusEl.innerHTML = '<span class="spinner"></span>Loading data from Jira...';
+      statusEl.innerHTML = '<span><span class="spinner"></span>Loading data from Jira...</span>';
 
       try {
         const response = await fetch(apiUrl);
@@ -2246,145 +2270,174 @@ function generateHTML(options) {
     }
 
     function renderTable(tableData) {
-      const tbody = document.getElementById('issuesTableBody');
-      tbody.innerHTML = '';
+      const container = document.getElementById('issuesTableContainer');
+      container.innerHTML = '';
 
       // Update table title with count
       updateTableTitle(tableData.length);
 
-      let prevSprint = null;
-      let prevAssignee = null;
-
+      // Group data by sprint
+      const sprintGroups = {};
+      const sprintOrder = [];
       tableData.forEach(row => {
-        const tr = document.createElement('tr');
-
-        // Add sprint-start class for visual separation between sprints
-        if (row.sprint !== prevSprint && prevSprint !== null) {
-          tr.classList.add('sprint-start');
+        if (!sprintGroups[row.sprint]) {
+          sprintGroups[row.sprint] = [];
+          sprintOrder.push(row.sprint);
         }
+        sprintGroups[row.sprint].push(row);
+      });
 
-        // Highlight rows with 0 HLE
-        if (!row.hle || row.hle === 0) {
-          tr.classList.add('row-hle-zero');
-        }
+      // Create a section for each sprint
+      sprintOrder.forEach(sprint => {
+        const sprintData = sprintGroups[sprint];
 
-        // Check if fix version differs from sprint (not equal)
-        const isVersionMismatch = compareVersions(row.fixVersion, row.sprint) !== 0;
+        const section = document.createElement('div');
+        section.className = 'sprint-section';
 
-        // Sprint column (show only if different from previous)
-        const sprintTd = document.createElement('td');
-        sprintTd.className = 'col-sprint';
-        if (row.sprint !== prevSprint) {
-          sprintTd.innerHTML = \`<span class="sprint-badge">\${row.sprint}</span>\`;
-          prevSprint = row.sprint;
-          prevAssignee = null; // Reset assignee when sprint changes
-        } else {
-          sprintTd.innerHTML = '<span class="empty-cell">—</span>';
-        }
-        tr.appendChild(sprintTd);
+        // Sprint header
+        const header = document.createElement('div');
+        header.className = 'sprint-header';
+        header.textContent = \`Sprint \${sprint} (\${sprintData.length})\`;
+        section.appendChild(header);
 
-        // Assignee column (show only if different from previous within same sprint)
-        const assigneeTd = document.createElement('td');
-        assigneeTd.className = 'col-assignee';
-        if (row.assignee !== prevAssignee) {
-          assigneeTd.textContent = row.assignee;
-          prevAssignee = row.assignee;
-        } else {
-          assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
-        }
-        tr.appendChild(assigneeTd);
+        // Create table for this sprint
+        const table = document.createElement('table');
+        table.className = 'issues-table';
 
-        // Task column
-        const taskTd = document.createElement('td');
-        taskTd.className = 'col-task';
-        const jiraUrl = \`\${JIRA_BROWSE_URL}\${row.key}\`;
-
-        // Type badge - red background for bugs, gray for others
-        let typeClass = 'task-type';
-        if (row.issueType === 'Bug') {
-          typeClass = 'task-type task-type-bug';
-        } else if (row.issueType === 'Analysis') {
-          typeClass = 'task-type task-type-analysis';
-        }
-
-        // Summary color - blue for Maintenance, pink for Excluded, black for others
-        let summaryClass = 'task-summary';
-        if (row.category === 'Maintenance') {
-          summaryClass = 'task-summary-maintenance';
-        } else if (row.category === 'Excluded') {
-          summaryClass = 'task-summary-excluded';
-        }
-
-        taskTd.innerHTML = \`
-          <span class="\${typeClass}">\${row.typeAbbr}</span>
-          <a href="\${jiraUrl}" target="_blank" class="task-key">\${row.key}</a>:
-          <span class="\${summaryClass}">\${row.summary}</span>
+        const thead = document.createElement('thead');
+        thead.innerHTML = \`
+          <tr>
+            <th class="col-assignee">Assignee</th>
+            <th class="col-task">Task</th>
+            <th class="col-hle">HLE</th>
+            <th class="col-time">Tracked</th>
+            <th class="col-version">Fix Version</th>
+            <th class="col-status">Status</th>
+          </tr>
         \`;
-        tr.appendChild(taskTd);
+        table.appendChild(thead);
 
-        // HLE column
-        const hleTd = document.createElement('td');
-        hleTd.className = 'col-hle';
-        if (!row.hle || row.hle === 0) {
-          hleTd.innerHTML = '<span class="hle-zero">0</span>';
-        } else {
-          hleTd.textContent = row.hle.toFixed(2);
-        }
-        tr.appendChild(hleTd);
+        const tbody = document.createElement('tbody');
+        let prevAssignee = null;
 
-        // Tracked time column with color coding
-        // 1 HLE = 8 hours = 28800 seconds
-        const timeTd = document.createElement('td');
-        timeTd.className = 'col-time';
+        sprintData.forEach(row => {
+          const tr = document.createElement('tr');
 
-        const hleInSeconds = row.hle * 28800; // 1 HLE = 8 hours = 28800 seconds
-        const ratio = hleInSeconds > 0 ? row.timeSpentSeconds / hleInSeconds : 0;
+          // Highlight rows with 0 HLE
+          if (!row.hle || row.hle === 0) {
+            tr.classList.add('row-hle-zero');
+          }
 
-        if (ratio > 3) {
-          // More than 3x HLE - red text
-          timeTd.innerHTML = \`<span class="time-critical">\${row.timeSpent}</span>\`;
-        } else if (ratio > 2) {
-          // More than 2x HLE - orange text
-          timeTd.innerHTML = \`<span class="time-warning">\${row.timeSpent}</span>\`;
-        } else {
-          // Normal - plain text
-          timeTd.textContent = row.timeSpent;
-        }
-        tr.appendChild(timeTd);
+          // Check if fix version differs from sprint (not equal)
+          const isVersionMismatch = compareVersions(row.fixVersion, sprint) !== 0;
 
-        // Fix version column
-        const versionTd = document.createElement('td');
-        versionTd.className = 'col-version';
-        if (row.fixVersion === 'Ungrouped') {
-          versionTd.innerHTML = '<span class="empty-cell">—</span>';
-        } else if (isVersionMismatch) {
-          versionTd.innerHTML = \`<span class="version-mismatch">\${row.fixVersion}</span>\`;
-        } else {
-          versionTd.textContent = row.fixVersion;
-        }
-        tr.appendChild(versionTd);
+          // Assignee column (show only if different from previous)
+          const assigneeTd = document.createElement('td');
+          assigneeTd.className = 'col-assignee';
+          if (row.assignee !== prevAssignee) {
+            assigneeTd.textContent = row.assignee;
+            prevAssignee = row.assignee;
+          } else {
+            assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
+          }
+          tr.appendChild(assigneeTd);
 
-        // Status column with color coding
-        const statusTd = document.createElement('td');
-        statusTd.className = 'col-status';
+          // Task column
+          const taskTd = document.createElement('td');
+          taskTd.className = 'col-task';
+          const jiraUrl = \`\${JIRA_BROWSE_URL}\${row.key}\`;
 
-        // Green for Done, In Testing, Merged
-        // Yellow for In Review
-        // Gray for others
-        const doneStatuses = ['Done', 'In Testing', 'Merged'];
-        const reviewStatuses = ['In Review'];
+          // Type badge - red background for bugs, gray for others
+          let typeClass = 'task-type';
+          if (row.issueType === 'Bug') {
+            typeClass = 'task-type task-type-bug';
+          } else if (row.issueType === 'Analysis') {
+            typeClass = 'task-type task-type-analysis';
+          }
 
-        let statusClass = 'status-label';
-        if (doneStatuses.includes(row.status)) {
-          statusClass += ' status-done';
-        } else if (reviewStatuses.includes(row.status)) {
-          statusClass += ' status-review';
-        }
+          // Summary color - blue for Maintenance, pink for Excluded, black for others
+          let summaryClass = 'task-summary';
+          if (row.category === 'Maintenance') {
+            summaryClass = 'task-summary-maintenance';
+          } else if (row.category === 'Excluded') {
+            summaryClass = 'task-summary-excluded';
+          }
 
-        statusTd.innerHTML = \`<span class="\${statusClass}">\${row.status}</span>\`;
-        tr.appendChild(statusTd);
+          taskTd.innerHTML = \`
+            <span class="\${typeClass}">\${row.typeAbbr}</span>
+            <a href="\${jiraUrl}" target="_blank" class="task-key">\${row.key}</a>:
+            <span class="\${summaryClass}">\${row.summary}</span>
+          \`;
+          tr.appendChild(taskTd);
 
-        tbody.appendChild(tr);
+          // HLE column
+          const hleTd = document.createElement('td');
+          hleTd.className = 'col-hle';
+          if (!row.hle || row.hle === 0) {
+            hleTd.innerHTML = '<span class="hle-zero">0</span>';
+          } else {
+            hleTd.textContent = row.hle.toFixed(2);
+          }
+          tr.appendChild(hleTd);
+
+          // Tracked time column with color coding
+          // 1 HLE = 8 hours = 28800 seconds
+          const timeTd = document.createElement('td');
+          timeTd.className = 'col-time';
+
+          const hleInSeconds = row.hle * 28800; // 1 HLE = 8 hours = 28800 seconds
+          const ratio = hleInSeconds > 0 ? row.timeSpentSeconds / hleInSeconds : 0;
+
+          if (ratio > 3) {
+            // More than 3x HLE - red text
+            timeTd.innerHTML = \`<span class="time-critical">\${row.timeSpent}</span>\`;
+          } else if (ratio > 2) {
+            // More than 2x HLE - orange text
+            timeTd.innerHTML = \`<span class="time-warning">\${row.timeSpent}</span>\`;
+          } else {
+            // Normal - plain text
+            timeTd.textContent = row.timeSpent;
+          }
+          tr.appendChild(timeTd);
+
+          // Fix version column
+          const versionTd = document.createElement('td');
+          versionTd.className = 'col-version';
+          if (row.fixVersion === 'Ungrouped') {
+            versionTd.innerHTML = '<span class="empty-cell">—</span>';
+          } else if (isVersionMismatch) {
+            versionTd.innerHTML = \`<span class="version-mismatch">\${row.fixVersion}</span>\`;
+          } else {
+            versionTd.textContent = row.fixVersion;
+          }
+          tr.appendChild(versionTd);
+
+          // Status column with color coding
+          const statusTd = document.createElement('td');
+          statusTd.className = 'col-status';
+
+          // Green for Done, In Testing, Merged
+          // Yellow for In Review
+          // Gray for others
+          const doneStatuses = ['Done', 'In Testing', 'Merged'];
+          const reviewStatuses = ['In Review'];
+
+          let statusClass = 'status-label';
+          if (doneStatuses.includes(row.status)) {
+            statusClass += ' status-done';
+          } else if (reviewStatuses.includes(row.status)) {
+            statusClass += ' status-review';
+          }
+
+          statusTd.innerHTML = \`<span class="\${statusClass}">\${row.status}</span>\`;
+          tr.appendChild(statusTd);
+
+          tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        section.appendChild(table);
+        container.appendChild(section);
       });
 
       document.getElementById('tableWrapper').style.display = 'block';

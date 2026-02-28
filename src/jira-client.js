@@ -447,6 +447,34 @@ class JiraClient {
   }
 
   /**
+   * Check if the last N versions form a contiguous sequence
+   * @param {Array} sortedVersions - Sorted version strings (e.g., ["6.17", "6.18", "6.19"])
+   * @param {number} count - Number of versions to check
+   * @returns {boolean} True if last N versions are contiguous
+   */
+  hasContiguousVersions(sortedVersions, count) {
+    if (sortedVersions.length < count) {
+      return false;
+    }
+
+    // Take last N versions
+    const lastN = sortedVersions.slice(-count);
+
+    // Check each consecutive pair
+    for (let i = 1; i < lastN.length; i++) {
+      const [prevMajor, prevMinor] = lastN[i - 1].split('.').map(Number);
+      const [currMajor, currMinor] = lastN[i].split('.').map(Number);
+
+      // Expected: same major, minor incremented by 1
+      if (currMajor !== prevMajor || currMinor !== prevMinor + 1) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * Group sprints by version key
    * @param {Map} sprintMap - Map of sprintId -> sprint data
    * @returns {Object} { versionMap, sortedVersions }
@@ -540,14 +568,12 @@ class JiraClient {
     const teamLabels = allTeams.map(t => `labels = "${t.label}"`).join(' OR ');
     const sprintAnalysisJql = `project = "${TEAM_SERENITY.project}" AND (${teamLabels}) AND sprint is not EMPTY AND ${JQL_FILTERS.EXCLUDE_TYPES} ORDER BY updated DESC`;
 
-    // Calculate pages needed - start small, only fetch more for larger sprint requests
-    // Default 6 sprints: 2 pages (200 issues) is usually enough
-    // For more sprints, scale up proportionally
-    const basePages = 2;
-    const maxPages = sprintCountToUse <= 6 ? basePages : Math.ceil(sprintCountToUse / 3);
+    // Pagination strategy: keep fetching until we have a contiguous sequence of sprints
+    // This handles cases where recently updated old issues push newer sprint issues out
+    const maxPages = 10; // Safety limit
     const minSprintsNeeded = sprintCountToUse + 2; // Need a few extra for filtering
 
-    console.log(`[Jira] Fetching issues for sprint analysis (target: ${sprintCountToUse} sprints, max pages: ${maxPages})`);
+    console.log(`[Jira] Fetching issues for sprint analysis (target: ${sprintCountToUse} contiguous sprints)`);
     console.log(`[Jira] JQL: ${sprintAnalysisJql}`);
 
     // Paginate through results to find all sprints
@@ -555,6 +581,7 @@ class JiraClient {
     let nextPageToken = null;
     let pageCount = 0;
     let foundSprintCount = 0;
+    let hasContiguous = false;
 
     do {
       pageCount++;
@@ -571,16 +598,19 @@ class JiraClient {
       const pageIssues = response.data.issues || [];
       allSprintAnalysisIssues.push(...pageIssues);
 
-      // Count unique sprints found so far
+      // Extract sprints and check for contiguous sequence
       const tempSprintMap = this.extractSprintsFromIssues(allSprintAnalysisIssues);
-      foundSprintCount = new Set(Array.from(tempSprintMap.values()).map(s => s.version.full)).size;
+      const tempVersions = Array.from(new Set(Array.from(tempSprintMap.values()).map(s => s.version.full)));
+      const sortedTempVersions = VersionUtils.sort(tempVersions);
+      foundSprintCount = sortedTempVersions.length;
+      hasContiguous = this.hasContiguousVersions(sortedTempVersions, minSprintsNeeded);
 
       nextPageToken = response.data.nextPageToken;
-      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues, ${foundSprintCount} sprints found`);
+      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues, ${foundSprintCount} sprints found, contiguous: ${hasContiguous}`);
 
-      // Stop early if we have enough sprints
-      if (foundSprintCount >= minSprintsNeeded) {
-        console.log(`[Jira] Found enough sprints (${foundSprintCount} >= ${minSprintsNeeded}), stopping pagination`);
+      // Stop if we have a contiguous sequence of enough sprints
+      if (hasContiguous) {
+        console.log(`[Jira] Found contiguous sequence of ${minSprintsNeeded} sprints, stopping pagination`);
         break;
       }
 
@@ -652,12 +682,11 @@ class JiraClient {
     // Step 1: Fetch issues with ONLY sprint field to analyze available sprints
     const sprintAnalysisJql = `project = "${FE_TEAM.project}" AND sprint is not EMPTY AND ${JQL_FILTERS.EXCLUDE_TYPES} ORDER BY updated DESC`;
 
-    // Calculate pages needed
-    const basePages = 2;
-    const maxPages = sprintCountToUse <= 6 ? basePages : Math.ceil(sprintCountToUse / 3);
+    // Pagination strategy: keep fetching until we have a contiguous sequence of sprints
+    const maxPages = 10; // Safety limit
     const minSprintsNeeded = sprintCountToUse + 2;
 
-    console.log(`[Jira] Fetching FE issues for sprint analysis (target: ${sprintCountToUse} sprints, max pages: ${maxPages})`);
+    console.log(`[Jira] Fetching FE issues for sprint analysis (target: ${sprintCountToUse} contiguous sprints)`);
     console.log(`[Jira] JQL: ${sprintAnalysisJql}`);
 
     // Paginate through results to find all sprints
@@ -665,6 +694,7 @@ class JiraClient {
     let nextPageToken = null;
     let pageCount = 0;
     let foundSprintCount = 0;
+    let hasContiguous = false;
 
     do {
       pageCount++;
@@ -681,16 +711,19 @@ class JiraClient {
       const pageIssues = response.data.issues || [];
       allSprintAnalysisIssues.push(...pageIssues);
 
-      // Count unique sprints found so far
+      // Extract sprints and check for contiguous sequence
       const tempSprintMap = this.extractSprintsFromIssues(allSprintAnalysisIssues);
-      foundSprintCount = new Set(Array.from(tempSprintMap.values()).map(s => s.version.full)).size;
+      const tempVersions = Array.from(new Set(Array.from(tempSprintMap.values()).map(s => s.version.full)));
+      const sortedTempVersions = VersionUtils.sort(tempVersions);
+      foundSprintCount = sortedTempVersions.length;
+      hasContiguous = this.hasContiguousVersions(sortedTempVersions, minSprintsNeeded);
 
       nextPageToken = response.data.nextPageToken;
-      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues, ${foundSprintCount} sprints found`);
+      console.log(`[Jira] Page ${pageCount}: ${pageIssues.length} issues, ${foundSprintCount} sprints found, contiguous: ${hasContiguous}`);
 
-      // Stop early if we have enough sprints
-      if (foundSprintCount >= minSprintsNeeded) {
-        console.log(`[Jira] Found enough sprints (${foundSprintCount} >= ${minSprintsNeeded}), stopping pagination`);
+      // Stop if we have a contiguous sequence of enough sprints
+      if (hasContiguous) {
+        console.log(`[Jira] Found contiguous sequence of ${minSprintsNeeded} sprints, stopping pagination`);
         break;
       }
 

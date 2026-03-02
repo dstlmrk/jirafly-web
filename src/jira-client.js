@@ -303,17 +303,17 @@ class JiraClient {
    * @returns {Object|null} { startDate, endDate } or null if not found
    */
   parseSprintDates(sprintName) {
-    // Match pattern like "(20. 1. - 2. 2.)" - captures both start and end dates
-    const dateMatch = sprintName.match(/\((\d+)\.\s*(\d+)\.\s*-\s*(\d+)\.\s*(\d+)\.?\s*\)/);
+    // Match pattern like "(20. 1. - 2. 2.)" or "(17. 2. - 2. 3. 2026)" with optional year
+    const dateMatch = sprintName.match(/\((\d+)\.\s*(\d+)\.\s*-\s*(\d+)\.\s*(\d+)\.?\s*(\d{4})?\s*\)/);
     if (!dateMatch) return null;
 
     const startDay = parseInt(dateMatch[1]);
     const startMonth = parseInt(dateMatch[2]) - 1; // JS months are 0-indexed
     const endDay = parseInt(dateMatch[3]);
     const endMonth = parseInt(dateMatch[4]) - 1;
+    const explicitYear = dateMatch[5] ? parseInt(dateMatch[5]) : null;
 
-    const now = new Date();
-    let year = now.getFullYear();
+    let year = explicitYear || new Date().getFullYear();
 
     // Create dates - handle year wrap-around for sprints crossing year boundary
     let startDate = new Date(year, startMonth, startDay);
@@ -324,12 +324,16 @@ class JiraClient {
       endDate = new Date(year + 1, endMonth, endDay);
     }
 
-    // If both dates are more than 6 months in the future, shift to previous year
-    const sixMonthsFromNow = new Date(now);
-    sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
-    if (startDate > sixMonthsFromNow) {
-      startDate = new Date(year - 1, startMonth, startDay);
-      endDate = new Date(endDate < startDate ? year : year - 1, endMonth, endDay);
+    // If no explicit year and dates are too far in future, shift to previous year
+    if (!explicitYear) {
+      const now = new Date();
+      const sixMonthsFromNow = new Date(now);
+      sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+      if (startDate > sixMonthsFromNow) {
+        startDate = new Date(year - 1, startMonth, startDay);
+        // Recalculate: if year-crossing (startMonth > endMonth), end is in original year
+        endDate = new Date(startMonth > endMonth ? year : year - 1, endMonth, endDay);
+      }
     }
 
     return { startDate, endDate };

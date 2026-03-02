@@ -1084,6 +1084,10 @@ function generateHTML(options) {
           assigneeFilter.disabled = true;
           loadNextSprintData();
         } else {
+          // Repopulate team filter (may have been overwritten by another page)
+          populatePlanningTeamFilter(nextSprintData.teams || [], currentNextSprintTeam);
+          document.getElementById('teamToggle').disabled = currentMode === 'fe';
+
           // Show cached data - always re-render with current team (may have changed)
           renderNextSprintCharts();
           const filteredData = getNextSprintDataForTeam(currentNextSprintTeam);

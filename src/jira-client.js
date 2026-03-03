@@ -362,28 +362,45 @@ class JiraClient {
     // Set to start of day for consistent comparison
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Debug: log all sprint dates and find current
+    // Collect candidates: distinguish between genuinely current and extension-only matches
+    // "Extension-only" = sprint already ended but within extendDays window
+    let bestGenuine = null;      // highest version genuinely containing today
+    let bestExtendedOnly = null;  // highest version matching only due to extendDays
+
     for (const version of sortedVersions) {
       const sprints = versionMap.get(version);
       for (const sprint of sprints) {
         const dates = this.parseSprintDates(sprint.name);
         if (dates) {
-          // Optionally extend end date (for next-sprint page: first N days of new sprint still show previous)
           const adjustedEnd = new Date(dates.endDate);
           if (extendDays > 0) {
             adjustedEnd.setDate(adjustedEnd.getDate() + extendDays);
           }
 
-          const isCurrentSprint = today >= dates.startDate && today <= adjustedEnd;
+          const isGenuinelyCurrent = today >= dates.startDate && today <= dates.endDate;
+          const isCurrentWithExtension = !isGenuinelyCurrent && extendDays > 0 && today >= dates.startDate && today <= adjustedEnd;
+          const isCurrentSprint = isGenuinelyCurrent || isCurrentWithExtension;
+
           const logSuffix = extendDays > 0 ? ` (current until ${adjustedEnd.toISOString().split('T')[0]})` : '';
           console.log(`[Jira] Sprint ${sprint.name} -> ${dates.startDate.toISOString().split('T')[0]} to ${dates.endDate.toISOString().split('T')[0]}${logSuffix}${isCurrentSprint ? ' ← CURRENT' : ''}`);
 
-          if (isCurrentSprint) {
-            console.log(`[Jira] Determined current version: ${version}`);
-            return version;
+          if (isGenuinelyCurrent) {
+            bestGenuine = version;
+          } else if (isCurrentWithExtension) {
+            bestExtendedOnly = version;
           }
         }
       }
+    }
+
+    // When extendDays > 0, prefer the extension-only match (= sprint that just ended)
+    // so that "next sprint" = the one that just started
+    // Fall back to genuinely current if no extension-only match
+    const bestCandidate = (extendDays > 0 && bestExtendedOnly) ? bestExtendedOnly : bestGenuine;
+
+    if (bestCandidate) {
+      console.log(`[Jira] Determined current version: ${bestCandidate}`);
+      return bestCandidate;
     }
 
     // Fallback: if no sprint contains today, use the most recent one (last in sorted list)
@@ -854,7 +871,9 @@ class JiraClient {
       sortedVersions = groupResult.sortedVersions;
     }
 
-    // Determine current version with 2-day extension (first 2 days of new sprint still show previous)
+    // Determine current version for display (no extension)
+    const displayCurrentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
+    // Determine current version with 2-day extension for fetching (first 2 days of new sprint still show previous as "current")
     currentVersion = this.determineCurrentVersion(versionMap, sortedVersions, 2);
 
     if (!currentVersion) {
@@ -863,7 +882,7 @@ class JiraClient {
 
     nextVersion = this.getNextVersion(currentVersion);
 
-    console.log(`[Jira] Current version: ${currentVersion}, next version: ${nextVersion.full}`);
+    console.log(`[Jira] Current version: ${displayCurrentVersion} (display), ${currentVersion} (fetch), next version: ${nextVersion.full}`);
 
     // Get sprint IDs for next version
     const nextVersionSprints = versionMap.get(nextVersion.full) || [];
@@ -915,11 +934,12 @@ class JiraClient {
 
     console.log(`[Jira] Fetched ${allIssues.length} issues for next sprint`);
 
+    const displayVersion = displayCurrentVersion || currentVersion;
     return {
       issues: allIssues,
       nextVersion: nextVersion.full,
-      currentVersion,
-      sprintDates: this.getSprintDatesForVersion(versionMap, currentVersion)
+      currentVersion: displayVersion,
+      sprintDates: this.getSprintDatesForVersion(versionMap, displayVersion)
     };
   }
 
@@ -946,7 +966,9 @@ class JiraClient {
     const sprintMap = this.extractSprintsFromIssues(analysisIssues);
     const { versionMap, sortedVersions } = this.groupSprintsByVersion(sprintMap);
 
-    // Determine current version with 2-day extension
+    // Determine current version for display (no extension)
+    const displayCurrentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
+    // Determine current version with 2-day extension for fetching
     const currentVersion = this.determineCurrentVersion(versionMap, sortedVersions, 2);
 
     if (!currentVersion) {
@@ -959,7 +981,7 @@ class JiraClient {
     }
 
     const nextVersion = this.getNextVersion(currentVersion);
-    console.log(`[Jira] FE current version: ${currentVersion}, next version: ${nextVersion.full}`);
+    console.log(`[Jira] FE current version: ${displayCurrentVersion} (display), ${currentVersion} (fetch), next version: ${nextVersion.full}`);
 
     // Get sprint IDs for next version
     const nextVersionSprints = versionMap.get(nextVersion.full) || [];
@@ -1011,11 +1033,12 @@ class JiraClient {
 
     console.log(`[Jira] Fetched ${allIssues.length} FE issues for next sprint`);
 
+    const displayVersion = displayCurrentVersion || currentVersion;
     return {
       issues: allIssues,
       nextVersion: nextVersion.full,
-      currentVersion,
-      sprintDates: this.getSprintDatesForVersion(versionMap, currentVersion)
+      currentVersion: displayVersion,
+      sprintDates: this.getSprintDatesForVersion(versionMap, displayVersion)
     };
   }
 
@@ -1131,8 +1154,12 @@ class JiraClient {
     const sprintMap = this.extractSprintsFromIssues(allSprintAnalysisIssues);
     const { versionMap, sortedVersions } = this.groupSprintsByVersion(sprintMap);
 
-    // Determine current version
-    const currentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
+    // Determine current version for display (no extension)
+    const displayCurrentVersion = this.determineCurrentVersion(versionMap, sortedVersions);
+    // Determine current version with 2-day extension for selecting future sprints
+    // (so the sprint that just started is still included as "future" for 2 days)
+    const fetchCurrentVersion = this.determineCurrentVersion(versionMap, sortedVersions, 2);
+    const currentVersion = fetchCurrentVersion || displayCurrentVersion;
 
     if (!currentVersion) {
       console.log(`[Jira] No current sprint found for ${project}`);
@@ -1144,14 +1171,15 @@ class JiraClient {
       };
     }
 
-    console.log(`[Jira] ${project.toUpperCase()} current version: ${currentVersion}`);
+    console.log(`[Jira] ${project.toUpperCase()} current version: ${displayCurrentVersion} (display), ${fetchCurrentVersion} (fetch)`);
 
-    // Get sprint dates for current version
-    const sprintDates = this.getSprintDatesForVersion(versionMap, currentVersion);
+    // Get sprint dates for display current version
+    const sprintDates = this.getSprintDatesForVersion(versionMap, displayCurrentVersion || currentVersion);
 
-    // Get future versions and sprint IDs
+    // Get future versions based on fetch current version (with extension)
+    // so that a sprint that just started is still included as "future"
     const { futureVersions, sprintIds } = this.selectFutureVersionsAndGetSprintIds(
-      versionMap, sortedVersions, currentVersion, 6
+      versionMap, sortedVersions, fetchCurrentVersion || displayCurrentVersion, 6
     );
 
     if (sprintIds.length === 0) {
@@ -1207,7 +1235,7 @@ class JiraClient {
 
     return {
       issues: allIssues,
-      currentVersion,
+      currentVersion: displayCurrentVersion || currentVersion,
       futureVersions,
       sprintDates
     };

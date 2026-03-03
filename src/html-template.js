@@ -872,7 +872,6 @@ function generateHTML(options) {
         <thead>
           <tr>
             <th class="col-assignee">Assignee</th>
-            <th class="col-total">Total</th>
             <th class="col-wsjf">WSJF</th>
             <th class="col-task">Task</th>
             <th class="col-hle">HLE</th>
@@ -1388,13 +1387,6 @@ function generateHTML(options) {
       }
       document.getElementById('unassignedTableTitle').textContent = tableTitle;
 
-      // Calculate total HLE per assignee
-      const assigneeTotals = {};
-      filteredData.forEach(row => {
-        const key = row.assignee || 'Unassigned';
-        assigneeTotals[key] = (assigneeTotals[key] || 0) + (row.hle || 0);
-      });
-
       let prevAssignee = null;
       filteredData.forEach(row => {
         const tr = document.createElement('tr');
@@ -1407,29 +1399,13 @@ function generateHTML(options) {
         // Assignee column - only show on first occurrence
         const assigneeTd = document.createElement('td');
         assigneeTd.className = 'col-assignee';
-        const isFirstAssigneeRow = row.assignee !== prevAssignee;
-        if (isFirstAssigneeRow) {
+        if (row.assignee !== prevAssignee) {
           assigneeTd.textContent = row.assignee || 'Unassigned';
           prevAssignee = row.assignee;
         } else {
           assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
         }
         tr.appendChild(assigneeTd);
-
-        // Total column
-        const totalTd = document.createElement('td');
-        totalTd.className = 'col-total';
-        if (isFirstAssigneeRow) {
-          const total = assigneeTotals[row.assignee || 'Unassigned'];
-          if (!total || total === 0) {
-            totalTd.innerHTML = '<span class="hle-zero">0.00</span>';
-          } else {
-            totalTd.textContent = total.toFixed(2);
-          }
-        } else {
-          totalTd.innerHTML = '<span class="empty-cell">—</span>';
-        }
-        tr.appendChild(totalTd);
 
         // WSJF column
         const wsjfTd = document.createElement('td');
@@ -1696,7 +1672,6 @@ function generateHTML(options) {
         thead.innerHTML = \`
           <tr>
             <th class="col-assignee">Assignee</th>
-            <th class="col-total">Total</th>
             <th class="col-wsjf">WSJF</th>
             <th class="col-task">Task</th>
             <th class="col-hle">HLE</th>
@@ -1705,13 +1680,6 @@ function generateHTML(options) {
           </tr>
         \`;
         table.appendChild(thead);
-
-        // Calculate total HLE per assignee within this sprint
-        const assigneeTotals = {};
-        sprintData.forEach(row => {
-          const key = row.assignee || 'Unassigned';
-          assigneeTotals[key] = (assigneeTotals[key] || 0) + (row.hle || 0);
-        });
 
         const tbody = document.createElement('tbody');
         let prevAssignee = null;
@@ -1727,29 +1695,13 @@ function generateHTML(options) {
           // Assignee column (show only if different from previous)
           const assigneeTd = document.createElement('td');
           assigneeTd.className = 'col-assignee';
-          const isFirstAssigneeRow = row.assignee !== prevAssignee;
-          if (isFirstAssigneeRow) {
+          if (row.assignee !== prevAssignee) {
             assigneeTd.textContent = row.assignee || 'Unassigned';
             prevAssignee = row.assignee;
           } else {
             assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
           }
           tr.appendChild(assigneeTd);
-
-          // Total column
-          const totalTd = document.createElement('td');
-          totalTd.className = 'col-total';
-          if (isFirstAssigneeRow) {
-            const total = assigneeTotals[row.assignee || 'Unassigned'];
-            if (!total || total === 0) {
-              totalTd.innerHTML = '<span class="hle-zero">0.00</span>';
-            } else {
-              totalTd.textContent = total.toFixed(2);
-            }
-          } else {
-            totalTd.innerHTML = '<span class="empty-cell">—</span>';
-          }
-          tr.appendChild(totalTd);
 
           // WSJF column
           const wsjfTd = document.createElement('td');

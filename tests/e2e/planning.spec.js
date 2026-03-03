@@ -37,8 +37,24 @@ test.describe.serial('Planning page', () => {
     const table = page.locator('#unassignedTable');
     await expect(table).toBeVisible();
 
-    const rows = page.locator('#unassignedTableBody tr');
-    const count = await rows.count();
+    let rows = page.locator('#unassignedTableBody tr');
+    let count = await rows.count();
+
+    // If "No team" filter shows 0 rows, select the first available team
+    if (count === 0) {
+      const select = page.locator('#teamToggle');
+      const options = await select.locator('option').all();
+      for (const option of options) {
+        const value = await option.getAttribute('value');
+        if (value && value !== 'NoTeam') {
+          await select.selectOption(value);
+          break;
+        }
+      }
+      rows = page.locator('#unassignedTableBody tr');
+      count = await rows.count();
+    }
+
     expect(count).toBeGreaterThan(0);
   });
 

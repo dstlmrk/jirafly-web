@@ -610,6 +610,11 @@ const CSS_STYLES = `
   }
 
   /* Unassigned page specific styles */
+  .issues-table .col-total {
+    width: 60px;
+    text-align: right;
+  }
+
   .issues-table .col-wsjf {
     width: 60px;
     text-align: right;
@@ -872,6 +877,7 @@ function generateHTML(options) {
         <thead>
           <tr>
             <th class="col-assignee">Assignee</th>
+            <th class="col-total">Total</th>
             <th class="col-wsjf">WSJF</th>
             <th class="col-task">Task</th>
             <th class="col-hle">HLE</th>
@@ -1387,6 +1393,14 @@ function generateHTML(options) {
       }
       document.getElementById('unassignedTableTitle').textContent = tableTitle;
 
+      // Build assignee → total HLE map (excluding Epics)
+      const assigneeTotals = {};
+      filteredData.forEach(row => {
+        if (row.issueType === 'Epic') return;
+        const key = row.assignee || 'Unassigned';
+        assigneeTotals[key] = (assigneeTotals[key] || 0) + (row.hle || 0);
+      });
+
       let prevAssignee = null;
       filteredData.forEach(row => {
         const tr = document.createElement('tr');
@@ -1401,11 +1415,28 @@ function generateHTML(options) {
         assigneeTd.className = 'col-assignee';
         if (row.assignee !== prevAssignee) {
           assigneeTd.textContent = row.assignee || 'Unassigned';
-          prevAssignee = row.assignee;
         } else {
           assigneeTd.innerHTML = '<span class="empty-cell">—</span>';
         }
         tr.appendChild(assigneeTd);
+
+        // Total column - sum of HLE for assignee (excluding Epics), shown only on first row
+        const totalTd = document.createElement('td');
+        totalTd.className = 'col-total';
+        if (row.assignee !== prevAssignee) {
+          const assigneeKey = row.assignee || 'Unassigned';
+          const total = assigneeTotals[assigneeKey] || 0;
+          if (total === 0) {
+            totalTd.innerHTML = '<span class="hle-zero">0</span>';
+          } else {
+            totalTd.textContent = total.toFixed(2);
+          }
+        } else {
+          totalTd.innerHTML = '<span class="empty-cell">—</span>';
+        }
+        tr.appendChild(totalTd);
+
+        prevAssignee = row.assignee;
 
         // WSJF column
         const wsjfTd = document.createElement('td');

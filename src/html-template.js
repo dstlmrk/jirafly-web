@@ -892,12 +892,12 @@ function generateHTML(options) {
 
     <div class="charts-container" id="futureSprintsChartsContainer" style="display: none;">
       <div class="chart-wrapper">
-        <div class="chart-title">Percentage Distribution by Category</div>
+        <div class="chart-title">Percentage Distribution by Category <span class="charts-note">(included epics)</span></div>
         <canvas id="futureSprintsPercentageChart" class="chart-canvas"></canvas>
       </div>
 
       <div class="chart-wrapper">
-        <div class="chart-title">Absolute HLE Values by Category</div>
+        <div class="chart-title">Absolute HLE Values by Category <span class="charts-note">(included epics)</span></div>
         <canvas id="futureSprintsHleChart" class="chart-canvas"></canvas>
       </div>
     </div>
@@ -1598,7 +1598,6 @@ function generateHTML(options) {
       });
 
       (issues || []).forEach(issue => {
-        if (issue.issueType === 'Epic') return; // Skip Epics
         const sprint = issue.sprint;
         if (!sprint || !hleByGroup[sprint]) return;
         const category = issue.category || 'Product';

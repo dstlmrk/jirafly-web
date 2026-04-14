@@ -612,7 +612,8 @@ const CSS_STYLES = `
   /* Unassigned page specific styles */
   .issues-table .col-total {
     width: 60px;
-    text-align: right;
+    text-align: left;
+    padding-right: 24px;
   }
 
   .issues-table .col-wsjf {
@@ -763,6 +764,152 @@ const CSS_STYLES = `
     margin-top: 8px;
     margin-bottom: 0;
   }
+
+  /* Settings gear button */
+  .settings-toggle {
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    border: none;
+    width: 41px;
+    height: 41px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    transition: background 0.2s;
+  }
+  .settings-toggle:hover { background: var(--btn-hover); }
+
+  /* Settings modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-dialog {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    padding: 32px;
+    width: 640px;
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .modal-title {
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
+    margin-bottom: 24px;
+  }
+  .modal-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 6px;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .settings-row label { font-size: 13px; color: var(--text-primary); }
+  .team-members-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .team-member-row {
+    display: grid;
+    grid-template-columns: 1fr 100px 100px 32px;
+    gap: 8px;
+    align-items: center;
+  }
+  .team-member-row input {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 7px 10px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .team-member-row input:focus { outline: none; border-color: var(--text-primary); }
+  .team-member-row input::placeholder { color: var(--text-secondary); }
+  .btn-remove-member {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-remove-member:hover { border-color: #dc2626; color: #dc2626; }
+  .team-member-header {
+    display: grid;
+    grid-template-columns: 1fr 100px 100px 32px;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .team-member-header span {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+  }
+  .modal-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+  }
+  .btn-add-member {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: border-color 0.2s;
+  }
+  .btn-add-member:hover { border-color: var(--text-primary); }
+  .btn-save-settings {
+    background: var(--btn-bg);
+    border: none;
+    color: var(--btn-text);
+    padding: 8px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: background 0.2s;
+  }
+  .btn-save-settings:hover { background: var(--btn-hover); }
+  .issues-table .col-total { white-space: nowrap; }
+  .cap-over { color: #dc2626; font-weight: 700; }
 `;
 
 function generateHTML(options) {
@@ -801,20 +948,10 @@ function generateHTML(options) {
         <select id="futureSprintsAssigneeFilter" class="header-filter" disabled>
           <option value="">All members</option>
         </select>
-        <button id="themeToggle" class="theme-toggle" title="Toggle dark mode">
-          <svg id="moonIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-          </svg>
-          <svg id="sunIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
-            <circle cx="12" cy="12" r="5"></circle>
-            <line x1="12" y1="1" x2="12" y2="3"></line>
-            <line x1="12" y1="21" x2="12" y2="23"></line>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-            <line x1="1" y1="12" x2="3" y2="12"></line>
-            <line x1="21" y1="12" x2="23" y2="12"></line>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        <button id="settingsToggle" class="settings-toggle" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
           </svg>
         </button>
         <a href="https://github.com/dstlmrk/jirafly-web" target="_blank" class="github-link" title="View on GitHub">
@@ -877,7 +1014,7 @@ function generateHTML(options) {
         <thead>
           <tr>
             <th class="col-assignee">Assignee</th>
-            <th class="col-total">Total</th>
+            <th class="col-total">Total / Cap.</th>
             <th class="col-wsjf">WSJF</th>
             <th class="col-task">Task</th>
             <th class="col-hle">HLE</th>
@@ -909,6 +1046,29 @@ function generateHTML(options) {
 
     </div>
 
+    <div id="settingsModal" class="modal-overlay">
+      <div class="modal-dialog">
+        <div class="modal-title">Settings</div>
+        <div class="modal-section-title">Appearance</div>
+        <div class="settings-row">
+          <label>Dark mode</label>
+          <label class="toggle-label">
+            <input type="checkbox" id="darkModeToggle">
+            <span class="toggle-switch"></span>
+          </label>
+        </div>
+        <div class="modal-section-title">Team Members</div>
+        <div class="team-member-header">
+          <span>Name</span><span>Velocity</span><span>Work days</span><span></span>
+        </div>
+        <div id="teamMembersList" class="team-members-list"></div>
+        <button id="addMemberBtn" class="btn-add-member">+ Add member</button>
+        <div class="modal-footer">
+          <button id="saveSettingsBtn" class="btn-save-settings">Save &amp; Close</button>
+        </div>
+      </div>
+    </div>
+
   <script>
     let percentageChart = null;
     let hleChart = null;
@@ -931,6 +1091,7 @@ function generateHTML(options) {
     let overviewAssigneeFilter = ''; // Selected assignee for overview page
     let planningAssigneeFilter = ''; // Selected assignee for planning page
     let futureSprintsAssigneeFilter = ''; // Selected assignee for future sprints page
+    let teamMembers = []; // Loaded from localStorage jirafly-team-members
 
     const COLORS = ${JSON.stringify(CHART_COLORS)};
     const JIRA_BROWSE_URL = '${jiraBrowseUrl}';
@@ -1401,6 +1562,14 @@ function generateHTML(options) {
         assigneeTotals[key] = (assigneeTotals[key] || 0) + (row.hle || 0);
       });
 
+      // Build assignee → capacity map from saved team members
+      const assigneeCapacity = {};
+      teamMembers.forEach(member => {
+        if (member.name) {
+          assigneeCapacity[member.name.toLowerCase()] = (member.workDays || 0) * (member.velocity || 0);
+        }
+      });
+
       let prevAssignee = null;
       filteredData.forEach(row => {
         const tr = document.createElement('tr');
@@ -1420,13 +1589,17 @@ function generateHTML(options) {
         }
         tr.appendChild(assigneeTd);
 
-        // Total column - sum of HLE for assignee (excluding Epics), shown only on first row
+        // Total / Cap. column — shown only on first row per assignee
         const totalTd = document.createElement('td');
         totalTd.className = 'col-total';
         if (row.assignee !== prevAssignee) {
           const assigneeKey = row.assignee || 'Unassigned';
           const total = assigneeTotals[assigneeKey] || 0;
-          if (total === 0) {
+          const cap = assigneeCapacity[assigneeKey.toLowerCase()];
+          if (cap != null && cap > 0) {
+            const totalStr = total === 0 ? '<span class="hle-zero">0.00</span>' : (total > cap ? \`<span class="cap-over">\${total.toFixed(2)}</span>\` : total.toFixed(2));
+            totalTd.innerHTML = \`\${totalStr} <span class="empty-cell">/</span> \${cap.toFixed(2)}\`;
+          } else if (total === 0) {
             totalTd.innerHTML = '<span class="hle-zero">0</span>';
           } else {
             totalTd.textContent = total.toFixed(2);
@@ -1808,20 +1981,97 @@ function generateHTML(options) {
       const savedTheme = localStorage.getItem('jirafly-theme');
       if (savedTheme === 'dark') {
         document.body.classList.add('dark');
-        updateThemeIcons(true);
       }
-    }
-
-    function updateThemeIcons(isDark) {
-      document.getElementById('moonIcon').style.display = isDark ? 'none' : 'block';
-      document.getElementById('sunIcon').style.display = isDark ? 'block' : 'none';
+      const checkbox = document.getElementById('darkModeToggle');
+      if (checkbox) checkbox.checked = document.body.classList.contains('dark');
     }
 
     function toggleTheme() {
       const isDark = document.body.classList.toggle('dark');
       localStorage.setItem('jirafly-theme', isDark ? 'dark' : 'light');
-      updateThemeIcons(isDark);
       updateChartsTheme();
+    }
+
+    // Settings modal
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem('jirafly-team-members');
+        teamMembers = raw ? JSON.parse(raw) : [];
+      } catch(e) { teamMembers = []; }
+    }
+
+    let settingsOriginalDark = false;
+
+    function openSettings() {
+      settingsOriginalDark = document.body.classList.contains('dark');
+      document.getElementById('darkModeToggle').checked = settingsOriginalDark;
+      renderTeamMemberRows();
+      document.getElementById('settingsModal').classList.add('open');
+    }
+
+    function closeSettings() {
+      // Revert theme if not saved
+      const isDark = document.body.classList.contains('dark');
+      if (isDark !== settingsOriginalDark) toggleTheme();
+      document.getElementById('settingsModal').classList.remove('open');
+    }
+
+    function saveSettings() {
+      localStorage.setItem('jirafly-team-members', JSON.stringify(teamMembers));
+      settingsOriginalDark = document.body.classList.contains('dark');
+      localStorage.setItem('jirafly-theme', settingsOriginalDark ? 'dark' : 'light');
+      document.getElementById('settingsModal').classList.remove('open');
+    }
+
+    function renderTeamMemberRows() {
+      const list = document.getElementById('teamMembersList');
+      list.innerHTML = '';
+      teamMembers.forEach((member, index) => list.appendChild(createTeamMemberRow(member, index)));
+    }
+
+    function createTeamMemberRow(member, index) {
+      const row = document.createElement('div');
+      row.className = 'team-member-row';
+
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = 'Name';
+      nameInput.value = member.name || '';
+      nameInput.addEventListener('input', e => { teamMembers[index].name = e.target.value; });
+
+      const velInput = document.createElement('input');
+      velInput.type = 'number';
+      velInput.placeholder = '0.275';
+      velInput.step = '0.001';
+      velInput.min = '0';
+      velInput.value = member.velocity != null ? member.velocity : '';
+      velInput.addEventListener('input', e => { teamMembers[index].velocity = parseFloat(e.target.value) || 0; });
+
+      const wdInput = document.createElement('input');
+      wdInput.type = 'number';
+      wdInput.placeholder = '10';
+      wdInput.step = '1';
+      wdInput.min = '0';
+      wdInput.value = member.workDays != null ? member.workDays : 10;
+      wdInput.addEventListener('input', e => { teamMembers[index].workDays = parseInt(e.target.value, 10) || 0; });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn-remove-member';
+      removeBtn.textContent = '\u00d7';
+      removeBtn.addEventListener('click', () => { teamMembers.splice(index, 1); renderTeamMemberRows(); });
+
+      row.appendChild(nameInput);
+      row.appendChild(velInput);
+      row.appendChild(wdInput);
+      row.appendChild(removeBtn);
+      return row;
+    }
+
+    function addTeamMember() {
+      teamMembers.push({ name: '', velocity: 0, workDays: 10 });
+      renderTeamMemberRows();
+      const rows = document.querySelectorAll('#teamMembersList .team-member-row');
+      if (rows.length) rows[rows.length - 1].querySelector('input').focus();
     }
 
     function getChartColors() {
@@ -1869,10 +2119,22 @@ function generateHTML(options) {
     }
 
     // Initialize theme immediately
+    loadSettings();
     initTheme();
 
-    // Setup theme toggle button
-    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+    // Setup settings button
+    document.getElementById('settingsToggle').addEventListener('click', openSettings);
+    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+    document.getElementById('addMemberBtn').addEventListener('click', addTeamMember);
+    document.getElementById('darkModeToggle').addEventListener('change', function() {
+      toggleTheme();
+    });
+    document.getElementById('settingsModal').addEventListener('click', function(e) {
+      if (e.target === this) closeSettings();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeSettings();
+    });
 
     function calculatePercentage(value, total) {
       if (!total || total === 0) return 0;

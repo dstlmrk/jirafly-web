@@ -144,20 +144,23 @@ test.describe.serial('Future Sprints page', () => {
   // === Dark mode ===
 
   test('dark mode toggle works', async () => {
-    const themeToggle = page.locator('#themeToggle');
     const body = page.locator('body');
 
     // Get initial state (normalize null to empty string)
     const initialClass = (await body.getAttribute('class')) || '';
 
-    // Toggle theme
-    await themeToggle.click();
+    // Open settings modal and toggle theme
+    await page.locator('#settingsToggle').click();
+    await page.locator('#darkModeToggle').click();
     const newClass = (await body.getAttribute('class')) || '';
     expect(newClass).not.toBe(initialClass);
 
     // Toggle back
-    await themeToggle.click();
+    await page.locator('#darkModeToggle').click();
     const finalClass = (await body.getAttribute('class')) || '';
     expect(finalClass).toBe(initialClass);
+
+    // Close modal
+    await page.locator('#saveSettingsBtn').click();
   });
 });

@@ -72,13 +72,13 @@ test.describe.serial('Overview page', () => {
 
   test('dark mode toggle works', async () => {
     const body = page.locator('body');
-    const themeButton = page.locator('#themeToggle');
 
-    // Check initial state (light mode)
+    // Check initial state
     const initiallyDark = await body.evaluate(el => el.classList.contains('dark'));
 
-    // Toggle theme
-    await themeButton.click();
+    // Open settings modal and toggle theme
+    await page.locator('#settingsToggle').click();
+    await page.locator('#darkModeToggle').click();
 
     if (initiallyDark) {
       await expect(body).not.toHaveClass(/dark/);
@@ -87,13 +87,16 @@ test.describe.serial('Overview page', () => {
     }
 
     // Toggle back
-    await themeButton.click();
+    await page.locator('#darkModeToggle').click();
 
     if (initiallyDark) {
       await expect(body).toHaveClass(/dark/);
     } else {
       await expect(body).not.toHaveClass(/dark/);
     }
+
+    // Close modal
+    await page.locator('#saveSettingsBtn').click();
   });
 
   // === Table details ===

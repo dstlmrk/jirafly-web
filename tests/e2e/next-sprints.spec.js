@@ -151,12 +151,12 @@ test.describe.serial('Future Sprints page', () => {
 
     // Open settings modal and toggle theme
     await page.locator('#settingsToggle').click();
-    await page.locator('#darkModeToggle').click();
+    await page.locator('label:has(#darkModeToggle)').click();
     const newClass = (await body.getAttribute('class')) || '';
     expect(newClass).not.toBe(initialClass);
 
     // Toggle back
-    await page.locator('#darkModeToggle').click();
+    await page.locator('label:has(#darkModeToggle)').click();
     const finalClass = (await body.getAttribute('class')) || '';
     expect(finalClass).toBe(initialClass);
 

@@ -78,7 +78,7 @@ test.describe.serial('Overview page', () => {
 
     // Open settings modal and toggle theme
     await page.locator('#settingsToggle').click();
-    await page.locator('#darkModeToggle').click();
+    await page.locator('label:has(#darkModeToggle)').click();
 
     if (initiallyDark) {
       await expect(body).not.toHaveClass(/dark/);
@@ -87,7 +87,7 @@ test.describe.serial('Overview page', () => {
     }
 
     // Toggle back
-    await page.locator('#darkModeToggle').click();
+    await page.locator('label:has(#darkModeToggle)').click();
 
     if (initiallyDark) {
       await expect(body).toHaveClass(/dark/);

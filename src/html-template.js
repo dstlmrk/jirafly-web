@@ -908,6 +908,25 @@ const CSS_STYLES = `
     transition: background 0.2s;
   }
   .btn-save-settings:hover { background: var(--btn-hover); }
+  .settings-segment { display: flex; border: 1px solid var(--border-color); overflow: hidden; border-radius: 4px; }
+  .settings-segment input[type="radio"] { display: none; }
+  .settings-segment label {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.5px; padding: 5px 14px; cursor: pointer;
+    color: var(--text-secondary); background: var(--bg-tertiary);
+    border-right: 1px solid var(--border-color); transition: background 0.15s, color 0.15s; user-select: none;
+  }
+  .settings-segment label:last-of-type { border-right: none; }
+  .settings-segment input[type="radio"]:checked + label { background: var(--btn-bg); color: var(--btn-text); }
+  .settings-select {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 5px 28px 5px 10px;
+    background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color);
+    border-radius: 4px; cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center; min-width: 140px;
+  }
+  .settings-select:focus { outline: none; border-color: var(--text-primary); }
+  .settings-select:disabled { opacity: 0.4; cursor: not-allowed; }
   .issues-table .col-total { white-space: nowrap; }
   .cap-over { color: #dc2626; font-weight: 700; }
 `;
@@ -1056,6 +1075,26 @@ function generateHTML(options) {
             <input type="checkbox" id="darkModeToggle">
             <span class="toggle-switch"></span>
           </label>
+        </div>
+        <div class="modal-section-title">Default View</div>
+        <div class="settings-row">
+          <label>Default project</label>
+          <div class="settings-segment">
+            <input type="radio" name="defaultProject" id="defaultProjectBE" value="be">
+            <label for="defaultProjectBE">BE</label>
+            <input type="radio" name="defaultProject" id="defaultProjectFE" value="fe">
+            <label for="defaultProjectFE">FE</label>
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Default team</label>
+          <select id="defaultTeamSelect" class="settings-select">
+            <option value="">All teams</option>
+            <option value="TeamSerenity">Serenity</option>
+            <option value="TeamFalcon">Falcon</option>
+            <option value="TeamDiscovery">Discovery</option>
+            <option value="TeamKosmik">Kosmik</option>
+          </select>
         </div>
         <div class="modal-section-title">Team Members</div>
         <div class="team-member-header">
@@ -1381,14 +1420,21 @@ function generateHTML(options) {
           availableNextSprintTeams = ['NoTeam', ...nextSprintData.teams];
         }
 
-        // Apply team from URL param > sessionStorage > default 'NoTeam'
+        // Apply team from URL param > sessionStorage > localStorage default > 'NoTeam'
+        // In FE mode, skip team selection (no team filtering in FE)
         const { team: urlTeam } = getURLParams();
-        const savedTeam = sessionStorage.getItem('jirafly-selected-team');
-        if (urlTeam && urlTeam !== 'All' && availableNextSprintTeams.includes(urlTeam)) {
-          currentNextSprintTeam = urlTeam;
-          sessionStorage.setItem('jirafly-selected-team', urlTeam);
-        } else if (savedTeam && availableNextSprintTeams.includes(savedTeam)) {
-          currentNextSprintTeam = savedTeam;
+        if (currentMode !== 'fe') {
+          const savedTeam = sessionStorage.getItem('jirafly-selected-team');
+          const defaultTeam = localStorage.getItem('jirafly-default-team') || '';
+          if (urlTeam && urlTeam !== 'All' && availableNextSprintTeams.includes(urlTeam)) {
+            currentNextSprintTeam = urlTeam;
+            sessionStorage.setItem('jirafly-selected-team', urlTeam);
+          } else if (savedTeam && availableNextSprintTeams.includes(savedTeam)) {
+            currentNextSprintTeam = savedTeam;
+          } else if (defaultTeam && availableNextSprintTeams.includes(defaultTeam)) {
+            currentNextSprintTeam = defaultTeam;
+            sessionStorage.setItem('jirafly-selected-team', defaultTeam);
+          }
         }
         // Populate team filter dropdown for planning page
         populatePlanningTeamFilter(nextSprintData.teams || [], currentNextSprintTeam);
@@ -2006,6 +2052,17 @@ function generateHTML(options) {
       settingsOriginalDark = document.body.classList.contains('dark');
       document.getElementById('darkModeToggle').checked = settingsOriginalDark;
       renderTeamMemberRows();
+      const defaultProject = localStorage.getItem('jirafly-default-project') || 'be';
+      document.getElementById(defaultProject === 'fe' ? 'defaultProjectFE' : 'defaultProjectBE').checked = true;
+      const defaultTeamSelect = document.getElementById('defaultTeamSelect');
+      defaultTeamSelect.value = localStorage.getItem('jirafly-default-team') || '';
+      defaultTeamSelect.disabled = (defaultProject === 'fe');
+      document.querySelectorAll('input[name="defaultProject"]').forEach(radio => {
+        radio.onchange = () => {
+          defaultTeamSelect.disabled = (radio.value === 'fe');
+          if (radio.value === 'fe') defaultTeamSelect.value = '';
+        };
+      });
       document.getElementById('settingsModal').classList.add('open');
     }
 
@@ -2020,6 +2077,10 @@ function generateHTML(options) {
       localStorage.setItem('jirafly-team-members', JSON.stringify(teamMembers));
       settingsOriginalDark = document.body.classList.contains('dark');
       localStorage.setItem('jirafly-theme', settingsOriginalDark ? 'dark' : 'light');
+      const checkedProject = document.querySelector('input[name="defaultProject"]:checked');
+      if (checkedProject) localStorage.setItem('jirafly-default-project', checkedProject.value);
+      const defaultTeamSelect = document.getElementById('defaultTeamSelect');
+      localStorage.setItem('jirafly-default-team', defaultTeamSelect.disabled ? '' : defaultTeamSelect.value);
       document.getElementById('settingsModal').classList.remove('open');
     }
 
@@ -2629,14 +2690,18 @@ function generateHTML(options) {
         // In FE mode, always use 'All' (no team filtering)
         if (currentMode === 'fe') {
           currentTeam = 'All';
-        } else if (team && availableTeams.includes(team)) {
+        } else if (team && team !== 'All' && availableTeams.includes(team)) {
           currentTeam = team;
           // Also save to sessionStorage for cross-page sync
           sessionStorage.setItem('jirafly-selected-team', team);
         } else {
           const savedTeam = sessionStorage.getItem('jirafly-selected-team');
+          const defaultTeam = localStorage.getItem('jirafly-default-team') || '';
           if (savedTeam && availableTeams.includes(savedTeam)) {
             currentTeam = savedTeam;
+          } else if (defaultTeam && availableTeams.includes(defaultTeam)) {
+            currentTeam = defaultTeam;
+            sessionStorage.setItem('jirafly-selected-team', defaultTeam);
           } else {
             currentTeam = 'All';
           }
@@ -3095,9 +3160,15 @@ function generateHTML(options) {
       document.getElementById('planningAssigneeFilter').addEventListener('change', handlePlanningAssigneeFilter);
       document.getElementById('futureSprintsAssigneeFilter').addEventListener('change', handleFutureSprintsAssigneeFilter);
 
-      // Initialize mode from URL params
-      const { project } = getURLParams();
-      currentMode = project;
+      // Initialize mode — priorita: URL param → localStorage default → 'be'
+      // sessionStorage se nepoužívá (SPA — currentMode přežívá navigaci v paměti; refresh má použít default)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlProjectParam = urlParams.get('project');
+      if (urlProjectParam === 'fe' || urlProjectParam === 'be') {
+        currentMode = urlProjectParam;
+      } else {
+        currentMode = localStorage.getItem('jirafly-default-project') || 'be';
+      }
       updateModeButton();
 
       // Load appropriate data based on current page
